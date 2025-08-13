@@ -1,4 +1,4 @@
-const { getSkuDetailsByCMCodeController, getAllSkuDetailsController, updateIsActiveStatusController, getActiveYearsController, getAllSkuDescriptionsController, insertSkuDetailController, updateSkuDetailBySkuCodeController, getAllMasterDataController, getConsolidatedDashboardController, toggleUniversalStatusController, testMappingTableStatus } = require('../controllers/controller.getSkuDetails');
+const { getSkuDetailsByCMCodeController, getAllSkuDetailsController, updateIsActiveStatusController, getActiveYearsController, getAllSkuDescriptionsController, insertSkuDetailController, updateSkuDetailBySkuCodeController, getAllMasterDataController, getConsolidatedDashboardController, toggleUniversalStatusController, testMappingTableStatus, exportExcelController, skuComponentMappingController } = require('../controllers/controller.getSkuDetails');
 const bearerTokenMiddleware = require('../middleware/middleware.bearer');
 
 async function skuDetailsRoutes(fastify, options) {
@@ -50,6 +50,16 @@ async function skuDetailsRoutes(fastify, options) {
   fastify.get('/test-mapping-table', {
     preHandler: bearerTokenMiddleware
   }, testMappingTableStatus);
+
+  // Export Excel API
+  fastify.post('/export-excel', {
+    preHandler: bearerTokenMiddleware
+  }, exportExcelController);
+
+  // SKU Component Mapping API - Get mapping data between SKU and components
+  fastify.post('/sku-component-mapping', {
+    preHandler: bearerTokenMiddleware
+  }, skuComponentMappingController);
 }
 
 module.exports = skuDetailsRoutes; 
