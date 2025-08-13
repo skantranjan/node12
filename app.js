@@ -1,6 +1,6 @@
 // Load environment variables
 require('dotenv').config();
-const fastify = require('fastify')({ logger: false });
+const fastify = require('fastify')({ logger: true });
 const skuRoutes = require('./routes/sku.routes');
 const cmRoutes = require('./routes/cm.routes');
 const skuDetailsRoutes = require('./routes/skuDetails.routes');

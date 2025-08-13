@@ -23,6 +23,179 @@ const {
 const pool = require('../config/db.config');
 
 /**
+ * AUDIT LOGGING FUNCTIONS
+ * These functions maintain a complete audit trail of all changes
+ */
+
+/**
+ * Log component mapping deletion to audit log
+ */
+async function logComponentMappingDeletion(deletedMapping, action, reason, user) {
+  try {
+    const auditData = {
+      cm_code: deletedMapping.cm_code,
+      sku_code: deletedMapping.sku_code,
+      component_code: deletedMapping.component_code,
+      version: deletedMapping.version,
+      component_packaging_type_id: deletedMapping.component_packaging_type_id,
+      period_id: deletedMapping.period_id,
+      component_valid_from: deletedMapping.component_valid_from,
+      component_valid_to: deletedMapping.component_valid_to,
+      created_by: deletedMapping.created_by,
+      action_type: 'DELETE',
+      action_reason: reason,
+      old_values: JSON.stringify(deletedMapping),
+      new_values: null,
+      changed_by: user || deletedMapping.created_by || 'system',
+      changed_at: new Date(),
+      change_summary: `Component mapping deleted: ${reason}`
+    };
+
+    const query = `
+      INSERT INTO public.sdp_sku_component_mapping_details_auditlog (
+        cm_code, sku_code, component_code, version, component_packaging_type_id,
+        period_id, component_valid_from, component_valid_to, created_by,
+        action_type, action_reason, old_values, new_values, changed_by, 
+        changed_at, change_summary
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+    `;
+
+    const values = [
+      auditData.cm_code, auditData.sku_code, auditData.component_code,
+      auditData.version, auditData.component_packaging_type_id, auditData.period_id,
+      auditData.component_valid_from, auditData.component_valid_to, auditData.created_by,
+      auditData.action_type, auditData.action_reason, auditData.old_values,
+      auditData.new_values, auditData.changed_by, auditData.changed_at,
+      auditData.change_summary
+    ];
+
+    await pool.query(query, values);
+    console.log(`✅ Audit log created for DELETE: ${deletedMapping.component_code} - ${reason}`);
+  } catch (error) {
+    console.error('❌ Error logging component mapping deletion:', error);
+    // Don't throw error - audit logging failure shouldn't break main operation
+  }
+}
+
+/**
+ * Log component mapping insertion to audit log
+ */
+async function logComponentMappingInsertion(insertedMapping, action, reason, user) {
+  try {
+    const auditData = {
+      cm_code: insertedMapping.cm_code,
+      sku_code: insertedMapping.sku_code,
+      component_code: insertedMapping.component_code,
+      version: insertedMapping.version,
+      component_packaging_type_id: insertedMapping.component_packaging_type_id,
+      period_id: insertedMapping.period_id,
+      component_valid_from: insertedMapping.component_valid_from,
+      component_valid_to: insertedMapping.component_valid_to,
+      created_by: insertedMapping.created_by,
+      action_type: 'INSERT',
+      action_reason: reason,
+      old_values: null,
+      new_values: JSON.stringify(insertedMapping),
+      changed_by: user || insertedMapping.created_by || 'system',
+      changed_at: new Date(),
+      change_summary: `Component mapping inserted: ${reason}`
+    };
+
+    const query = `
+      INSERT INTO public.sdp_sku_component_mapping_details_auditlog (
+        cm_code, sku_code, component_code, version, component_packaging_type_id,
+        period_id, component_valid_from, component_valid_to, created_by,
+        action_type, action_reason, old_values, new_values, changed_by, 
+        changed_at, change_summary
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+    `;
+
+    const values = [
+      auditData.cm_code, auditData.sku_code, auditData.component_code,
+      auditData.version, auditData.component_packaging_type_id, auditData.period_id,
+      auditData.component_valid_from, auditData.component_valid_to, auditData.created_by,
+      auditData.action_type, auditData.action_reason, auditData.old_values,
+      auditData.new_values, auditData.changed_by, auditData.changed_at,
+      auditData.change_summary
+    ];
+
+    await pool.query(query, values);
+    console.log(`✅ Audit log created for INSERT: ${insertedMapping.component_code} - ${reason}`);
+  } catch (error) {
+    console.error('❌ Error logging component mapping insertion:', error);
+    // Don't throw error - audit logging failure shouldn't break main operation
+  }
+}
+
+/**
+ * Log SKU detail update to audit log
+ */
+async function logSkuDetailUpdate(oldData, newData, changedFields, user) {
+  try {
+    const auditData = {
+      cm_code: oldData.cm_code,
+      sku_code: oldData.sku_code,
+      component_code: null, // SKU updates don't affect component mappings directly
+      version: null,
+      component_packaging_type_id: null,
+      period_id: null,
+      component_valid_from: null,
+      component_valid_to: null,
+      created_by: oldData.created_by,
+      action_type: 'UPDATE',
+      action_reason: 'SKU_DETAIL_UPDATE',
+      old_values: JSON.stringify(oldData),
+      new_values: JSON.stringify(newData),
+      changed_by: user || 'system',
+      changed_at: new Date(),
+      change_summary: `SKU details updated: ${changedFields.join(', ')}`
+    };
+
+    const query = `
+      INSERT INTO public.sdp_sku_component_mapping_details_auditlog (
+        cm_code, sku_code, component_code, version, component_packaging_type_id,
+        period_id, component_valid_from, component_valid_to, created_by,
+        action_type, action_reason, old_values, new_values, changed_by, 
+        changed_at, change_summary
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+    `;
+
+    const values = [
+      auditData.cm_code, auditData.sku_code, auditData.component_code,
+      auditData.version, auditData.component_packaging_type_id, auditData.period_id,
+      auditData.component_valid_from, auditData.component_valid_to, auditData.created_by,
+      auditData.action_type, auditData.action_reason, auditData.old_values,
+      auditData.new_values, auditData.changed_by, auditData.changed_at,
+      auditData.change_summary
+    ];
+
+    await pool.query(query, values);
+    console.log(`✅ Audit log created for SKU UPDATE: ${oldData.sku_code} - Fields: ${changedFields.join(', ')}`);
+  } catch (error) {
+    console.error('❌ Error logging SKU detail update:', error);
+    // Don't throw error - audit logging failure shouldn't break main operation
+  }
+}
+
+/**
+ * Log bulk component mapping operations (multiple deletions/insertions)
+ */
+async function logBulkComponentMappingOperation(operations, action, reason, user) {
+  try {
+    for (const operation of operations) {
+      if (action === 'DELETE') {
+        await logComponentMappingDeletion(operation, action, reason, user);
+      } else if (action === 'INSERT') {
+        await logComponentMappingInsertion(operation, action, reason, user);
+      }
+    }
+    console.log(`✅ Bulk audit logging completed: ${operations.length} ${action} operations - ${reason}`);
+  } catch (error) {
+    console.error(`❌ Error in bulk audit logging for ${action}:`, error);
+  }
+}
+
+/**
  * Controller to get SKU details filtered by CM code
  */
 async function getSkuDetailsByCMCodeController(request, reply) {
@@ -129,13 +302,13 @@ async function insertSkuDetailController(request, reply) {
     // Get skutype from query parameter if provided
     const skutype = request.query.skutype;
 
-    // Log the incoming data from UI
-    console.log('=== SKU ADDITION REQUEST DATA ===');
-    console.log('Full Request Body:', JSON.stringify(request.body, null, 2));
-    console.log('SKU Data:', JSON.stringify(sku_data, null, 2));
-    console.log('Components Data:', JSON.stringify(components, null, 2));
-    console.log('SKU Type from query:', skutype);
-    console.log('=== END SKU ADDITION REQUEST DATA ===');
+         // Log the incoming data from UI
+     // console.log('=== SKU ADDITION REQUEST DATA ===');
+     // console.log('Full Request Body:', JSON.stringify(request.body, null, 2));
+     // console.log('SKU Data:', JSON.stringify(sku_data, null, 2));
+     // console.log('Components Data:', JSON.stringify(components, null, 2));
+     // console.log('SKU Type from query:', skutype);
+     // console.log('=== END SKU ADDITION REQUEST DATA ===');
 
     // Validate required sku_data
     if (!sku_data) {
@@ -162,33 +335,33 @@ async function insertSkuDetailController(request, reply) {
       });
     }
 
-    // Check if SKU description already exists (normalized comparison)
-    console.log('🔍 === CHECKING FOR DUPLICATE SKU DESCRIPTION ===');
-    console.log('Description to check:', sku_data.sku_description);
-    
-    const descriptionExists = await checkSkuDescriptionExists(sku_data.sku_description);
-    if (descriptionExists) {
-      console.log('❌ Duplicate description detected!');
-      
-      // Get similar descriptions for better error reporting
-      const similarDescriptions = await getSimilarSkuDescriptions(sku_data.sku_description);
-      console.log('Similar descriptions found:', similarDescriptions.length);
-      
-      return reply.code(422).send({ 
-        success: false, 
-        message: `SKU description already exists in the system`,
-        error_type: 'DUPLICATE_DESCRIPTION',
-        details: {
-          original_description: sku_data.sku_description,
-          similar_existing_descriptions: similarDescriptions.map(d => ({
-            sku_code: d.sku_code,
-            description: d.sku_description
-          }))
-        }
-      });
-    } else {
-      console.log('✅ No duplicate description found');
-    }
+         // Check if SKU description already exists (normalized comparison)
+     // console.log('🔍 === CHECKING FOR DUPLICATE SKU DESCRIPTION ===');
+     // console.log('Description to check:', sku_data.sku_description);
+     
+     const descriptionExists = await checkSkuDescriptionExists(sku_data.sku_description);
+     if (descriptionExists) {
+       // console.log('❌ Duplicate description detected!');
+       
+       // Get similar descriptions for better error reporting
+       const similarDescriptions = await getSimilarSkuDescriptions(sku_data.sku_description);
+       // console.log('Similar descriptions found:', similarDescriptions.length);
+       
+       return reply.code(422).send({ 
+         success: false, 
+         message: `SKU description already exists in the system`,
+         error_type: 'DUPLICATE_DESCRIPTION',
+         details: {
+           original_description: sku_data.sku_description,
+           similar_existing_descriptions: similarDescriptions.map(d => ({
+             sku_code: d.sku_code,
+             description: d.sku_description
+           }))
+         }
+       });
+     } else {
+       // console.log('✅ No duplicate description found');
+     }
 
     // Add skutype to sku_data only if provided
     if (skutype) {
@@ -201,50 +374,53 @@ async function insertSkuDetailController(request, reply) {
     // Handle component data if provided
     const mappingResults = [];
     
-    if (components && Array.isArray(components) && components.length > 0) {
-      console.log('🔍 === PROCESSING COMPONENTS FOR MAPPING ONLY ===');
-      console.log('Components count:', components.length);
-      
-      for (const component of components) {
-        try {
-          // Insert into SKU component mapping table only (no component table insertion)
-          console.log('🔍 === MAPPING TABLE INSERTION ATTEMPT ===');
-          console.log('Component:', component.component_code);
+         if (components && Array.isArray(components) && components.length > 0) {
+       // console.log('🔍 === PROCESSING COMPONENTS FOR MAPPING ONLY ===');
+       // console.log('Components count:', components.length);
+       
+       for (const component of components) {
+         try {
+           // Insert into SKU component mapping table only (no component table insertion)
+           // console.log('🔍 === MAPPING TABLE INSERTION ATTEMPT ===');
+           // console.log('Component:', component.component_code);
+           
+           const mappingData = {
+             cm_code: sku_data.cm_code,
+             sku_code: sku_data.sku_code,
+             component_code: component.component_code,
+             version: component.version || 1,
+             component_packaging_type_id: component.component_packaging_type_id,
+             period_id: sku_data.period || component.period_id || 2, // Added fallback to integer 2
+             component_valid_from: component.component_valid_from,
+             component_valid_to: component.component_valid_to,
+             created_by: sku_data.created_by || component.created_by || '1'
+           };
+           
+           // console.log('Mapping Data to Insert:', JSON.stringify(mappingData, null, 2));
+           // console.log('Calling insertSkuComponentMapping...');
+           
+                       const insertedMapping = await insertSkuComponentMapping(mappingData);
+            
+            // console.log('✅ Mapping Inserted Successfully:', insertedMapping);
+            
+            // Log the insertion to audit log
+            await logComponentMappingInsertion(insertedMapping, 'INSERT', 'NEW_SKU_COMPONENT', sku_data.created_by || 'admin');
+           
+           mappingResults.push({
+             component_code: component.component_code,
+             mapping_action: 'inserted',
+             mapping_id: insertedMapping.id
+           });
           
-          const mappingData = {
-            cm_code: sku_data.cm_code,
-            sku_code: sku_data.sku_code,
-            component_code: component.component_code,
-            version: component.version || 1,
-            component_packaging_type_id: component.component_packaging_type_id,
-            period_id: sku_data.period || component.period_id,
-            component_valid_from: component.component_valid_from,
-            component_valid_to: component.component_valid_to,
-            created_by: sku_data.created_by || component.created_by || '1'
-          };
-          
-          console.log('Mapping Data to Insert:', JSON.stringify(mappingData, null, 2));
-          console.log('Calling insertSkuComponentMapping...');
-          
-          const insertedMapping = await insertSkuComponentMapping(mappingData);
-          
-          console.log('✅ Mapping Inserted Successfully:', insertedMapping);
-          
-          mappingResults.push({
-            component_code: component.component_code,
-            mapping_action: 'inserted',
-            mapping_id: insertedMapping.id
-          });
-          
-        } catch (mappingError) {
-          console.error('❌ ERROR Inserting into Mapping Table:', mappingError);
-          console.error('Error Stack:', mappingError.stack);
-          mappingResults.push({
-            component_code: component.component_code,
-            mapping_action: 'error',
-            error: mappingError.message
-          });
-        }
+                 } catch (mappingError) {
+           console.error('❌ ERROR Inserting into Mapping Table:', mappingError);
+           // console.error('Error Stack:', mappingError.stack);
+           mappingResults.push({
+             component_code: component.component_code,
+             mapping_action: 'error',
+             error: mappingError.message
+           });
+         }
       }
     }
     
@@ -266,7 +442,7 @@ async function insertSkuDetailController(request, reply) {
  * Controller to update a SKU detail by sku_code
  */
 async function updateSkuDetailBySkuCodeController(request, reply) {
-  console.log('🔥 UPDATE API CALLED!');
+  // console.log('🔥 UPDATE API CALLED!');
   
   try {
     const { sku_code } = request.params;
@@ -280,12 +456,12 @@ async function updateSkuDetailBySkuCodeController(request, reply) {
       components
     } = request.body;
     
-    // Console log the data received from UI
-    console.log('=== SKU UPDATE API - DATA FROM UI ===');
-    console.log('SKU Code:', sku_code);
-    console.log('Request Body:', JSON.stringify(request.body, null, 2));
-    console.log('Components:', components);
-    console.log('=== END SKU UPDATE API DATA ===');
+         // Console log the data received from UI
+     // console.log('=== SKU UPDATE API - DATA FROM UI ===');
+     // console.log('SKU Code:', sku_code);
+     // console.log('Request Body:', JSON.stringify(request.body, null, 2));
+     // console.log('Components:', components);
+     // console.log('=== END SKU UPDATE API DATA ===');
     
     // Validation
     if (!sku_code || sku_code.trim() === '') {
@@ -303,6 +479,15 @@ async function updateSkuDetailBySkuCodeController(request, reply) {
       });
     }
     
+    // First, we need to get the existing SKU data to access cm_code
+    const existingSkuData = await getExistingSkuData(sku_code);
+    if (!existingSkuData) {
+      return reply.code(404).send({ 
+        success: false, 
+        message: 'SKU not found' 
+      });
+    }
+    
     // Update SKU detail
     const data = {};
     if (sku_description !== undefined) data.sku_description = sku_description;
@@ -312,42 +497,114 @@ async function updateSkuDetailBySkuCodeController(request, reply) {
     if (formulation_reference !== undefined) data.formulation_reference = formulation_reference;
     if (bulk_expert !== undefined) data.bulk_expert = bulk_expert;
     
+    // Get the updated data to compare with old data for audit logging
     const updated = await updateSkuDetailBySkuCode(sku_code, data);
+    
+    // Log SKU detail changes to audit log
+    if (updated && Object.keys(data).length > 0) {
+      const changedFields = Object.keys(data).filter(key => 
+        existingSkuData[key] !== data[key]
+      );
+      
+      if (changedFields.length > 0) {
+        await logSkuDetailUpdate(existingSkuData, updated, changedFields, 'admin');
+      }
+    }
     
     if (!updated) {
       return reply.code(404).send({ success: false, message: 'SKU detail not found' });
     }
     
-    // Handle component updates
-    let componentUpdateResults = null;
+    // Handle component mapping updates using sdp_sku_component_mapping_details table
+    let componentMappingResults = null;
+    
+    const cm_code = existingSkuData.cm_code;
+         // console.log('🔍 === EXISTING SKU DATA ===');
+     // console.log('CM Code from existing SKU:', cm_code);
+     // console.log('Existing SKU data:', JSON.stringify(existingSkuData, null, 2));
     
     if (components && Array.isArray(components) && components.length > 0) {
-      // Extract component_id from the component objects
-      const componentIds = components.map(comp => ({
-        component_id: comp.component_id || comp.id // Handle both component_id and id
-      }));
+             // console.log('🔍 === PROCESSING COMPONENTS FOR MAPPING UPDATE ===');
+       // console.log('Components count:', components.length);
+       // console.log('Components data:', JSON.stringify(components, null, 2));
+       // console.log('SKU Type:', skutype);
       
-      console.log('Extracted Component IDs:', componentIds);
+                     // Step A: DELETE all existing mappings for this cm_code + sku_code combination
+        const deletedMappings = await deleteAllMappingsForCMAndSKU(cm_code, sku_code, 'REPLACED', 'admin');
+        // console.log('✅ Deleted existing mappings:', deletedMappings);
+        
+        // Step B: INSERT new mapping records based on components array
+        const insertedMappings = await insertNewMappingsForCMAndSKU(cm_code, sku_code, components, 'REPLACED_MAPPING', 'admin');
+       // console.log('✅ Inserted new mappings:', insertedMappings);
       
-      // Step A: Remove SKU code from ALL components first
-      const removedFromAll = await removeSkuFromAllComponentDetails(sku_code);
+             // Validate SKU type logic
+       if (skutype === 'internal') {
+         // console.log('⚠️ WARNING: Internal SKU should not have components - but components provided');
+       } else if (skutype === 'external') {
+         // console.log('✅ External SKU with components - correct configuration');
+       } else {
+         // console.log('ℹ️ SKU type not specified or changed - processing components anyway');
+       }
       
-      // Step B: Add SKU code to specified components
-      const addedToSpecific = await addSkuToSpecificComponents(sku_code, componentIds);
-      
-      componentUpdateResults = {
-        removed_from_all: removedFromAll,
-        added_to_specific: addedToSpecific
+      componentMappingResults = {
+        deleted_mappings: deletedMappings,
+        inserted_mappings: insertedMappings,
+        action: 'replaced_all_mappings',
+        sku_type: skutype,
+        validation: 'components_processed'
       };
-    } else if (skutype === 'external') {
-      // Special handling for external SKUs (remove from all components)
-      componentUpdateResults = await removeSkuFromAllComponentDetails(sku_code);
+      
+         } else if (skutype === 'internal') {
+       // console.log('🔍 === SKU TYPE CHANGED TO INTERNAL ===');
+       // console.log('Removing all component mappings for internal SKU');
+      
+             // DELETE all mappings for internal SKU (no component relationships)
+       const deletedMappings = await deleteAllMappingsForCMAndSKU(cm_code, sku_code, 'INTERNAL_SKU_CONVERSION', 'admin');
+      
+      componentMappingResults = {
+        deleted_mappings: deletedMappings,
+        inserted_mappings: [],
+        action: 'removed_all_mappings_for_internal_sku'
+      };
+      
+         } else if (skutype === 'external') {
+       // console.log('🔍 === SKU TYPE CHANGED TO EXTERNAL ===');
+       
+       if (components && Array.isArray(components) && components.length > 0) {
+         // console.log('✅ External SKU with components - DELETE old + INSERT new');
+         // console.log('Components count:', components.length);
+        
+                 // External SKU with components - DELETE old + INSERT new
+         const deletedMappings = await deleteAllMappingsForCMAndSKU(cm_code, sku_code, 'EXTERNAL_SKU_UPDATE', 'admin');
+         const insertedMappings = await insertNewMappingsForCMAndSKU(cm_code, sku_code, components, 'EXTERNAL_SKU_UPDATE', 'admin');
+        
+        componentMappingResults = {
+          deleted_mappings: deletedMappings,
+          inserted_mappings: insertedMappings,
+          action: 'external_sku_mappings_updated'
+        };
+        
+             } else {
+         // console.log('❌ External SKU without components - returning error');
+         // External SKU without components - return error
+        return reply.code(400).send({ 
+          success: false, 
+          message: 'External SKU requires components array with data' 
+        });
+      }
+         } else {
+       // console.log('🔍 === NO COMPONENTS ARRAY - SKU INFO ONLY UPDATE ===');
+      componentMappingResults = {
+        deleted_mappings: [],
+        inserted_mappings: [],
+        action: 'sku_info_only_updated'
+      };
     }
     
     reply.code(200).send({ 
       success: true, 
       data: updated,
-      component_updates: componentUpdateResults
+      component_mapping_updates: componentMappingResults
     });
   } catch (error) {
     request.log.error(error);
@@ -355,38 +612,174 @@ async function updateSkuDetailBySkuCodeController(request, reply) {
   }
 }
 
+
+
 /**
- * Remove SKU code from ALL component details (handles comma-separated values)
+ * Get existing SKU data by SKU code
  */
-async function removeSkuFromAllComponentDetails(skuCode) {
+async function getExistingSkuData(sku_code) {
   try {
-    const { removeSkuFromAllComponentDetails } = require('../models/model.getSkuDetails');
-    const results = await removeSkuFromAllComponentDetails(skuCode);
-    return {
-      message: `Removed SKU code '${skuCode}' from all component details`,
-      updated_components: results.length,
-      details: results
-    };
+    // console.log('🔍 === GETTING EXISTING SKU DATA ===');
+    // console.log('SKU Code:', sku_code);
+    
+    const query = `
+      SELECT * FROM public.sdp_skudetails 
+      WHERE sku_code = $1
+    `;
+    
+    const result = await pool.query(query, [sku_code]);
+    
+    if (result.rows.length === 0) {
+      // console.log('❌ No SKU found with code:', sku_code);
+      return null;
+    }
+    
+    // console.log('✅ Found existing SKU data');
+    return result.rows[0];
+    
   } catch (error) {
-    console.error('Error removing SKU from all component details:', error);
+    console.error('❌ Error getting existing SKU data:', error);
     throw error;
   }
 }
 
 /**
- * Add SKU code to specific components (handles comma-separated values)
+ * Delete all mapping records for a specific CM code and SKU code combination
  */
-async function addSkuToSpecificComponents(skuCode, components) {
+async function deleteAllMappingsForCMAndSKU(cm_code, sku_code, reason = 'REPLACED', user = 'system') {
   try {
-    const { addSkuToSpecificComponents } = require('../models/model.getSkuDetails');
-    const results = await addSkuToSpecificComponents(skuCode, components);
+    // console.log('🗑️ === DELETING ALL MAPPINGS ===');
+    // console.log('CM Code:', cm_code);
+    // console.log('SKU Code:', sku_code);
+    
+    // First, get all records that will be deleted for audit logging
+    const selectQuery = `
+      SELECT * FROM public.sdp_sku_component_mapping_details 
+      WHERE cm_code = $1 AND sku_code = $2
+    `;
+    
+    const selectResult = await pool.query(selectQuery, [cm_code, sku_code]);
+    const recordsToDelete = selectResult.rows;
+    
+    if (recordsToDelete.length === 0) {
+      return {
+        message: `No mapping records found for CM Code: ${cm_code} and SKU Code: ${sku_code}`,
+        deleted_count: 0,
+        deleted_records: []
+      };
+    }
+    
+    // Now delete the records
+    const deleteQuery = `
+      DELETE FROM public.sdp_sku_component_mapping_details 
+      WHERE cm_code = $1 AND sku_code = $2
+      RETURNING *
+    `;
+    
+    const result = await pool.query(deleteQuery, [cm_code, sku_code]);
+    
+    // Log all deletions to audit log
+    await logBulkComponentMappingOperation(recordsToDelete, 'DELETE', reason, user);
+    
+    // console.log('✅ Deleted mappings count:', result.rows.length);
+    
     return {
-      message: `Added SKU code '${skuCode}' to specified components`,
-      updated_components: results.length,
-      details: results
+      message: `Deleted all mapping records for CM Code: ${cm_code} and SKU Code: ${sku_code}`,
+      deleted_count: result.rows.length,
+      deleted_records: result.rows,
+      audit_logged: true
     };
   } catch (error) {
-    console.error('Error adding SKU to specific components:', error);
+    console.error('❌ Error deleting mappings:', error);
+    throw error;
+  }
+}
+
+/**
+ * Insert new mapping records for a CM code and SKU code combination
+ */
+async function insertNewMappingsForCMAndSKU(cm_code, sku_code, components, reason = 'NEW_MAPPING', user = 'system') {
+  try {
+    // console.log('➕ === INSERTING NEW MAPPINGS ===');
+    // console.log('CM Code:', cm_code);
+    // console.log('SKU Code:', sku_code);
+    // console.log('Components:', components.length);
+    
+    const insertedMappings = [];
+    const successfulInsertions = [];
+    
+    for (const component of components) {
+      try {
+                 const mappingData = {
+           cm_code: cm_code,
+           sku_code: sku_code,
+           component_code: component.component_code,
+           version: component.version || 1,
+           component_packaging_type_id: component.component_packaging_type_id || null,
+           period_id: component.period_id || 2, // Changed from '2025-2026' to integer 2
+           component_valid_from: component.component_valid_from || null,
+           component_valid_to: component.component_valid_to || null,
+           created_by: component.created_by || '1'
+         };
+        
+        // console.log('📝 Inserting mapping data:', JSON.stringify(mappingData, null, 2));
+        
+        // console.log('📝 Attempting to insert mapping with data:', JSON.stringify(mappingData, null, 2));
+        
+        // Check if insertSkuComponentMapping function exists
+        if (typeof insertSkuComponentMapping !== 'function') {
+          throw new Error('insertSkuComponentMapping function is not available');
+        }
+        
+        // console.log('🔍 Function exists, calling insertSkuComponentMapping...');
+        try {
+          const insertedMapping = await insertSkuComponentMapping(mappingData);
+          // console.log('✅ Mapping inserted successfully:', insertedMapping);
+          
+          // Store successful insertion for audit logging
+          successfulInsertions.push(insertedMapping);
+          
+          insertedMappings.push({
+            component_code: component.component_code,
+            mapping_id: insertedMapping.id,
+            status: 'inserted'
+          });
+          
+        } catch (insertError) {
+          console.error('❌ ERROR in insertSkuComponentMapping call:', insertError);
+          console.error('Error details:', {
+            message: insertError.message,
+            stack: insertError.stack,
+            function: typeof insertSkuComponentMapping
+          });
+          throw insertError;
+        }
+        
+      } catch (insertError) {
+        console.error('❌ ERROR inserting mapping for component:', component.component_code, insertError);
+        insertedMappings.push({
+          component_code: component.component_code,
+          error: insertError.message,
+          status: 'failed'
+        });
+      }
+    }
+    
+    // Log all successful insertions to audit log
+    if (successfulInsertions.length > 0) {
+      await logBulkComponentMappingOperation(successfulInsertions, 'INSERT', reason, user);
+    }
+    
+    return {
+      message: `Inserted new mapping records for CM Code: ${cm_code} and SKU Code: ${sku_code}`,
+      inserted_count: insertedMappings.filter(m => m.status === 'inserted').length,
+      failed_count: insertedMappings.filter(m => m.status === 'failed').length,
+      inserted_mappings: insertedMappings,
+      audit_logged: successfulInsertions.length > 0
+    };
+    
+  } catch (error) {
+    console.error('❌ Error inserting new mappings:', error);
     throw error;
   }
 }
@@ -419,133 +812,133 @@ async function getAllMasterDataController(request, reply) {
  */
 async function skuComponentMappingController(request, reply) {
   try {
-    console.log('🚀 === SKU COMPONENT MAPPING API CALLED ===');
-    console.log('📅 Timestamp:', new Date().toISOString());
-    console.log('🔗 Request URL:', request.url);
-    console.log('📝 Request Method:', request.method);
-    console.log('🔑 Headers:', JSON.stringify(request.headers, null, 2));
+    // console.log('🚀 === SKU COMPONENT MAPPING API CALLED ===');
+    // console.log('📅 Timestamp:', new Date().toISOString());
+    // console.log('🔗 Request URL:', request.url);
+    // console.log('📝 Request Method:', request.method);
+    // console.log('🔑 Headers:', JSON.stringify(request.headers, null, 2));
     
     const { cm_code, sku_code } = request.body;
     
-    console.log('📊 === REQUEST BODY DATA ===');
-    console.log('Full Request Body:', JSON.stringify(request.body, null, 2));
-    console.log('Extracted cm_code:', cm_code);
-    console.log('Extracted sku_code:', sku_code);
-    console.log('cm_code type:', typeof cm_code);
-    console.log('sku_code type:', typeof sku_code);
-    console.log('cm_code length:', cm_code ? cm_code.length : 'null/undefined');
-    console.log('sku_code length:', sku_code ? sku_code.length : 'null/undefined');
+    // console.log('📊 === REQUEST BODY DATA ===');
+    // console.log('Full Request Body:', JSON.stringify(request.body, null, 2));
+    // console.log('Extracted cm_code:', cm_code);
+    // console.log('Extracted sku_code:', sku_code);
+    // console.log('cm_code type:', typeof cm_code);
+    // console.log('sku_code type:', typeof sku_code);
+    // console.log('cm_code length:', cm_code ? cm_code.length : 'null/undefined');
+    // console.log('sku_code length:', sku_code ? sku_code.length : 'null/undefined');
     
-    // Validate required parameters
-    if (!cm_code || cm_code.trim() === '') {
-      console.log('❌ VALIDATION FAILED: cm_code is missing or empty');
-      return reply.code(400).send({
-        success: false,
-        message: 'cm_code is required in request body'
-      });
-    }
+         // Validate required parameters
+     if (!cm_code || cm_code.trim() === '') {
+       // console.log('❌ VALIDATION FAILED: cm_code is missing or empty');
+       return reply.code(400).send({
+         success: false,
+         message: 'cm_code is required in request body'
+       });
+     }
+     
+     if (!sku_code || sku_code.trim() === '') {
+       // console.log('❌ VALIDATION FAILED: sku_code is missing or empty');
+       return reply.code(400).send({
+         success: false,
+         message: 'sku_code is required in request body'
+       });
+     }
+     
+     // console.log('✅ VALIDATION PASSED: Both cm_code and sku_code are present');
+     // console.log('🔍 === STARTING DATABASE QUERIES ===');
+     // console.log('Searching for CM Code:', cm_code, 'and SKU Code:', sku_code);
     
-    if (!sku_code || sku_code.trim() === '') {
-      console.log('❌ VALIDATION FAILED: sku_code is missing or empty');
-      return reply.code(400).send({
-        success: false,
-        message: 'sku_code is required in request body'
-      });
-    }
+         // Step 1: Find mapping records for the specific cm_code + sku_code combination
+     // console.log('📋 Step 1: Querying sdp_sku_component_mapping_details table...');
+     const mappingRecords = await getMappingRecordsByCMAndSKU(cm_code, sku_code);
+     
+     // console.log('📊 === MAPPING RECORDS RESULTS ===');
+     // console.log('Raw mapping records:', JSON.stringify(mappingRecords, null, 2));
+     // console.log('Number of mapping records found:', mappingRecords ? mappingRecords.length : 'null');
+     // console.log('Mapping records type:', typeof mappingRecords);
+     
+     if (!mappingRecords || mappingRecords.length === 0) {
+       // console.log('❌ NO MAPPING RECORDS FOUND');
+       return reply.code(404).send({
+         success: false,
+         message: `No mapping records found for CM Code: ${cm_code} and SKU Code: ${sku_code}`
+       });
+     }
+     
+     // console.log('✅ Mapping records found:', mappingRecords.length);
+     // console.log('📋 Step 2: Extracting component codes from mapping records...');
     
-    console.log('✅ VALIDATION PASSED: Both cm_code and sku_code are present');
-    console.log('🔍 === STARTING DATABASE QUERIES ===');
-    console.log('Searching for CM Code:', cm_code, 'and SKU Code:', sku_code);
+         // Step 2: Extract all component_codes from mapping records
+     const componentCodes = mappingRecords.map(record => record.component_code).filter(code => code !== null);
+     // console.log('🔍 === COMPONENT CODES EXTRACTION ===');
+     // console.log('All component_codes from mapping records:', componentCodes);
+     // console.log('Number of component codes:', componentCodes.length);
+     // console.log('Component codes type:', typeof componentCodes);
+     
+     if (componentCodes.length === 0) {
+       // console.log('⚠️ WARNING: No component codes found in mapping records');
+     }
+     
+     // console.log('📋 Step 3: Querying sdp_component_details table...');
     
-    // Step 1: Find mapping records for the specific cm_code + sku_code combination
-    console.log('📋 Step 1: Querying sdp_sku_component_mapping_details table...');
-    const mappingRecords = await getMappingRecordsByCMAndSKU(cm_code, sku_code);
+         // Step 3: Get component details from sdp_component_details table
+     const componentDetails = await getComponentDetailsByCodes(componentCodes);
+     // console.log('📊 === COMPONENT DETAILS RESULTS ===');
+     // console.log('Raw component details:', JSON.stringify(componentDetails, null, 2));
+     // console.log('Number of component details found:', componentDetails ? componentDetails.length : 'null');
+     // console.log('Component details type:', typeof componentDetails);
+     
+     // console.log('📋 Step 4: Combining mapping data with component details...');
     
-    console.log('📊 === MAPPING RECORDS RESULTS ===');
-    console.log('Raw mapping records:', JSON.stringify(mappingRecords, null, 2));
-    console.log('Number of mapping records found:', mappingRecords ? mappingRecords.length : 'null');
-    console.log('Mapping records type:', typeof mappingRecords);
+         // Step 4: Combine mapping data with component details
+     const combinedData = mappingRecords.map(mappingRecord => {
+       const componentDetail = componentDetails.find(comp => comp.component_code === mappingRecord.component_code);
+       return {
+         mapping: mappingRecord,
+         component: componentDetail || null
+       };
+     });
+     
+     // console.log('🔗 === COMBINED DATA RESULTS ===');
+     // console.log('Combined data structure:', JSON.stringify(combinedData, null, 2));
+     // console.log('Number of combined records:', combinedData.length);
+     
+     // console.log('✅ === PREPARING FINAL RESPONSE ===');
     
-    if (!mappingRecords || mappingRecords.length === 0) {
-      console.log('❌ NO MAPPING RECORDS FOUND');
-      return reply.code(404).send({
-        success: false,
-        message: `No mapping records found for CM Code: ${cm_code} and SKU Code: ${sku_code}`
-      });
-    }
-    
-    console.log('✅ Mapping records found:', mappingRecords.length);
-    console.log('📋 Step 2: Extracting component codes from mapping records...');
-    
-    // Step 2: Extract all component_codes from mapping records
-    const componentCodes = mappingRecords.map(record => record.component_code).filter(code => code !== null);
-    console.log('🔍 === COMPONENT CODES EXTRACTION ===');
-    console.log('All component_codes from mapping records:', componentCodes);
-    console.log('Number of component codes:', componentCodes.length);
-    console.log('Component codes type:', typeof componentCodes);
-    
-    if (componentCodes.length === 0) {
-      console.log('⚠️ WARNING: No component codes found in mapping records');
-    }
-    
-    console.log('📋 Step 3: Querying sdp_component_details table...');
-    
-    // Step 3: Get component details from sdp_component_details table
-    const componentDetails = await getComponentDetailsByCodes(componentCodes);
-    console.log('📊 === COMPONENT DETAILS RESULTS ===');
-    console.log('Raw component details:', JSON.stringify(componentDetails, null, 2));
-    console.log('Number of component details found:', componentDetails ? componentDetails.length : 'null');
-    console.log('Component details type:', typeof componentDetails);
-    
-    console.log('📋 Step 4: Combining mapping data with component details...');
-    
-    // Step 4: Combine mapping data with component details
-    const combinedData = mappingRecords.map(mappingRecord => {
-      const componentDetail = componentDetails.find(comp => comp.component_code === mappingRecord.component_code);
-      return {
-        mapping: mappingRecord,
-        component: componentDetail || null
-      };
-    });
-    
-    console.log('🔗 === COMBINED DATA RESULTS ===');
-    console.log('Combined data structure:', JSON.stringify(combinedData, null, 2));
-    console.log('Number of combined records:', combinedData.length);
-    
-    console.log('✅ === PREPARING FINAL RESPONSE ===');
-    
-    const finalResponse = {
-      success: true,
-      message: 'SKU component mapping data retrieved successfully',
-      request: {
-        cm_code: cm_code,
-        sku_code: sku_code
-      },
-      summary: {
-        mapping_records_count: mappingRecords.length,
-        component_details_count: componentDetails.length,
-        combined_records_count: combinedData.length
-      },
-      data: {
-        mapping_records: mappingRecords,
-        component_details: componentDetails,
-        combined_data: combinedData
-      }
-    };
-    
-    console.log('📤 === FINAL RESPONSE ===');
-    console.log('Response status: 200 OK');
-    console.log('Response body:', JSON.stringify(finalResponse, null, 2));
-    console.log('🚀 === API CALL COMPLETED SUCCESSFULLY ===');
+         const finalResponse = {
+       success: true,
+       message: 'SKU component mapping data retrieved successfully',
+       request: {
+         cm_code: cm_code,
+         sku_code: sku_code
+       },
+       summary: {
+         mapping_records_count: mappingRecords.length,
+         component_details_count: componentDetails.length,
+         combined_records_count: combinedData.length
+       },
+       data: {
+         mapping_records: mappingRecords,
+         component_details: componentDetails,
+         combined_data: combinedData
+       }
+     };
+     
+     // console.log('📤 === FINAL RESPONSE ===');
+     // console.log('Response status: 200 OK');
+     // console.log('Response body:', JSON.stringify(finalResponse, null, 2));
+     // console.log('🚀 === API CALL COMPLETED SUCCESSFULLY ===');
     
     reply.code(200).send(finalResponse);
     
-  } catch (error) {
-    console.error('❌ === ERROR IN SKU COMPONENT MAPPING CONTROLLER ===');
-    console.error('Error message:', error.message);
-    console.error('Error stack:', error.stack);
-    console.error('Error type:', error.constructor.name);
-    console.error('Full error object:', JSON.stringify(error, null, 2));
+     } catch (error) {
+     console.error('❌ === ERROR IN SKU COMPONENT MAPPING CONTROLLER ===');
+     console.error('Error message:', error.message);
+     // console.error('Error stack:', error.stack);
+     // console.error('Error type:', error.constructor.name);
+     // console.error('Full error object:', JSON.stringify(error, null, 2));
     
     reply.code(500).send({
       success: false,
@@ -641,15 +1034,15 @@ async function getConsolidatedDashboardController(request, reply) {
       component_id
     });
 
-    // Log the request for debugging
-    console.log('=== CONSOLIDATED DASHBOARD REQUEST ===');
-    console.log('CM Code:', cmCode);
-    console.log('Include:', includeArray);
-    console.log('Period:', period);
-    console.log('Search:', search);
-    console.log('Component ID:', component_id);
-    console.log('Data Keys:', Object.keys(dashboardData));
-    console.log('=== END CONSOLIDATED DASHBOARD REQUEST ===');
+         // Log the request for debugging
+     // console.log('=== CONSOLIDATED DASHBOARD REQUEST ===');
+     // console.log('CM Code:', cmCode);
+     // console.log('Include:', includeArray);
+     // console.log('Period:', period);
+     // console.log('Search:', search);
+     // console.log('Component ID:', component_id);
+     // console.log('Data Keys:', Object.keys(dashboardData));
+     // console.log('=== END CONSOLIDATED DASHBOARD REQUEST ===');
 
     reply.code(200).send({
       success: true,
@@ -726,18 +1119,18 @@ async function toggleUniversalStatusController(request, reply) {
       });
     }
 
-    // Log the request for debugging
-    console.log('=== UNIVERSAL STATUS TOGGLE REQUEST ===');
-    console.log('Type:', type);
-    console.log('ID:', id);
-    console.log('Is Active:', is_active);
-    console.log('=== END UNIVERSAL STATUS TOGGLE REQUEST ===');
-
-    // Perform the status toggle
-    const result = await toggleUniversalStatus(type, id, is_active);
-
-    // Log the action for audit purposes
-    console.log(`Status change: ${type} ID ${id} set to ${is_active ? 'active' : 'inactive'}`);
+         // Log the request for debugging
+     // console.log('=== UNIVERSAL STATUS TOGGLE REQUEST ===');
+     // console.log('Type:', type);
+     // console.log('ID:', id);
+     // console.log('Is Active:', is_active);
+     // console.log('=== END UNIVERSAL STATUS TOGGLE REQUEST ===');
+     
+     // Perform the status toggle
+     const result = await toggleUniversalStatus(type, id, is_active);
+     
+     // Log the action for audit purposes
+     // console.log(`Status change: ${type} ID ${id} set to ${is_active ? 'active' : 'inactive'}`);
 
     reply.code(200).send({
       success: true,
@@ -782,45 +1175,45 @@ async function exportExcelController(request, reply) {
   try {
     const { cm_code } = request.body;
     
-    console.log('📊 === EXPORT EXCEL REQUEST ===');
-    console.log('CM Code:', cm_code);
-    
-    // Validate cm_code
-    if (!cm_code || cm_code.trim() === '') {
-      return reply.code(400).send({
-        success: false,
-        message: 'cm_code is required in request body'
-      });
-    }
-    
-    // Get data for the specified CM code
-    const skuDetails = await getSkuDetailsByCMCode(cm_code);
-    
-    if (!skuDetails || skuDetails.length === 0) {
-      return reply.code(404).send({
-        success: false,
-        message: `No data found for CM code: ${cm_code}`
-      });
-    }
-    
-    // Get mapping data for the CM code
-    const mappingData = await getMappingDataByCMCode(cm_code);
-    
-    // Prepare Excel data structure
-    const excelData = {
-      cm_code: cm_code,
-      export_date: new Date().toISOString(),
-      sku_count: skuDetails.length,
-      mapping_count: mappingData.length,
-      data: {
-        skus: skuDetails,
-        mappings: mappingData
-      }
-    };
-    
-    console.log('✅ Excel export data prepared successfully');
-    console.log('SKU Count:', skuDetails.length);
-    console.log('Mapping Count:', mappingData.length);
+         // console.log('📊 === EXPORT EXCEL REQUEST ===');
+     // console.log('CM Code:', cm_code);
+     
+     // Validate cm_code
+     if (!cm_code || cm_code.trim() === '') {
+       return reply.code(400).send({
+         success: false,
+         message: 'cm_code is required in request body'
+       });
+     }
+     
+     // Get data for the specified CM code
+     const skuDetails = await getSkuDetailsByCMCode(cm_code);
+     
+     if (!skuDetails || skuDetails.length === 0) {
+       return reply.code(404).send({
+         success: false,
+         message: `No data found for CM code: ${cm_code}`
+       });
+     }
+     
+     // Get mapping data for the CM code
+     const mappingData = await getMappingDataByCMCode(cm_code);
+     
+     // Prepare Excel data structure
+     const excelData = {
+       cm_code: cm_code,
+       export_date: new Date().toISOString(),
+       sku_count: skuDetails.length,
+       mapping_count: mappingData.length,
+       data: {
+         skus: skuDetails,
+         mappings: mappingData
+       }
+     };
+     
+     // console.log('✅ Excel export data prepared successfully');
+     // console.log('SKU Count:', skuDetails.length);
+     // console.log('Mapping Count:', mappingData.length);
     
     reply.code(200).send({
       success: true,
@@ -863,11 +1256,11 @@ async function getMappingDataByCMCode(cm_code) {
  */
 async function testMappingTableStatus(request, reply) {
   try {
-    console.log('🔍 === TESTING MAPPING TABLE STATUS ===');
+    // console.log('🔍 === TESTING MAPPING TABLE STATUS ===');
     
     // Check if table exists
     const tableExists = await checkMappingTableExists();
-    console.log('Table exists:', tableExists);
+    // console.log('Table exists:', tableExists);
     
     if (!tableExists) {
       return reply.code(404).send({
@@ -883,42 +1276,148 @@ async function testMappingTableStatus(request, reply) {
     // Try a simple test insert
     let testInsertResult = null;
     try {
-      const testData = {
-        cm_code: 'TEST_CM',
-        sku_code: 'TEST_SKU',
-        component_code: 'TEST_COMP',
-        version: 1,
-        component_packaging_type_id: null,
-        period_id: 'TEST_PERIOD',
-        component_valid_from: null,
-        component_valid_to: null,
-        created_by: 'TEST_USER'
-      };
-      
-      testInsertResult = await insertSkuComponentMapping(testData);
-      console.log('✅ Test insert successful:', testInsertResult);
-      
-      // Clean up test data
-      // Note: You might want to add a delete function for this
-      
-    } catch (testError) {
-      console.error('❌ Test insert failed:', testError);
-      testInsertResult = { error: testError.message };
+              const testData = {
+          cm_code: 'TEST_CM',
+          sku_code: 'TEST_SKU',
+          component_code: 'TEST_COMP',
+          version: 1,
+          component_packaging_type_id: null,
+          period_id: 1, // Changed from 'TEST_PERIOD' to integer 1
+          component_valid_from: null,
+          component_valid_to: null,
+          created_by: 'TEST_USER'
+        };
+       
+       testInsertResult = await insertSkuComponentMapping(testData);
+       // console.log('✅ Test insert successful:', testInsertResult);
+       
+       // Clean up test data
+       // Note: You might want to add a delete function for this
+       
+     } catch (testError) {
+       console.error('❌ Test insert failed:', testError);
+       testInsertResult = { error: testError.message };
+     }
+     
+     reply.code(200).send({
+       success: true,
+       table_exists: tableExists,
+       table_structure: tableStructure,
+       test_insert: testInsertResult,
+       message: 'Mapping table status check completed'
+     });
+     
+   } catch (error) {
+     console.error('Error in test function:', error);
+     reply.code(500).send({
+       success: false,
+       message: 'Failed to check mapping table status',
+       error: error.message
+     });
+   }
+ }
+
+/**
+ * Get audit log data for reporting and analysis
+ */
+async function getAuditLogController(request, reply) {
+  try {
+    const { 
+      cm_code, 
+      sku_code, 
+      component_code, 
+      action_type, 
+      action_reason,
+      start_date,
+      end_date,
+      limit = 100,
+      offset = 0
+    } = request.query;
+    
+    let whereConditions = [];
+    let queryParams = [];
+    let paramIndex = 1;
+    
+    // Build dynamic WHERE clause based on provided filters
+    if (cm_code) {
+      whereConditions.push(`cm_code = $${paramIndex++}`);
+      queryParams.push(cm_code);
     }
+    
+    if (sku_code) {
+      whereConditions.push(`sku_code = $${paramIndex++}`);
+      queryParams.push(sku_code);
+    }
+    
+    if (component_code) {
+      whereConditions.push(`component_code = $${paramIndex++}`);
+      queryParams.push(component_code);
+    }
+    
+    if (action_type) {
+      whereConditions.push(`action_type = $${paramIndex++}`);
+      queryParams.push(action_type);
+    }
+    
+    if (action_reason) {
+      whereConditions.push(`action_reason = $${paramIndex++}`);
+      queryParams.push(action_reason);
+    }
+    
+    if (start_date) {
+      whereConditions.push(`changed_at >= $${paramIndex++}`);
+      queryParams.push(start_date);
+    }
+    
+    if (end_date) {
+      whereConditions.push(`changed_at <= $${paramIndex++}`);
+      queryParams.push(end_date);
+    }
+    
+    const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : '';
+    
+    const query = `
+      SELECT * FROM public.sdp_sku_component_mapping_details_auditlog
+      ${whereClause}
+      ORDER BY changed_at DESC, cm_code ASC, sku_code ASC, component_code ASC
+      LIMIT $${paramIndex++} OFFSET $${paramIndex++}
+    `;
+    
+    queryParams.push(limit, offset);
+    
+    const result = await pool.query(query, queryParams);
+    
+    // Get total count for pagination
+    const countQuery = `
+      SELECT COUNT(*) as total FROM public.sdp_sku_component_mapping_details_auditlog
+      ${whereClause}
+    `;
+    
+    const countResult = await pool.query(countQuery, whereConditions.length > 0 ? queryParams.slice(0, -2) : []);
+    const totalCount = parseInt(countResult.rows[0].total);
     
     reply.code(200).send({
       success: true,
-      table_exists: tableExists,
-      table_structure: tableStructure,
-      test_insert: testInsertResult,
-      message: 'Mapping table status check completed'
+      message: 'Audit log data retrieved successfully',
+      data: {
+        records: result.rows,
+        pagination: {
+          total: totalCount,
+          limit: parseInt(limit),
+          offset: parseInt(offset),
+          has_more: (parseInt(offset) + parseInt(limit)) < totalCount
+        },
+        filters_applied: {
+          cm_code, sku_code, component_code, action_type, action_reason, start_date, end_date
+        }
+      }
     });
     
   } catch (error) {
-    console.error('Error in test function:', error);
+    console.error('Error in audit log controller:', error);
     reply.code(500).send({
       success: false,
-      message: 'Failed to check mapping table status',
+      message: 'Failed to retrieve audit log data',
       error: error.message
     });
   }
@@ -937,5 +1436,6 @@ module.exports = {
   toggleUniversalStatusController,
   testMappingTableStatus,
   exportExcelController,
-  skuComponentMappingController
+  skuComponentMappingController,
+  getAuditLogController
 }; 
