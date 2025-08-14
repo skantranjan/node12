@@ -309,6 +309,51 @@ PATCH /toggle-status
 5. **Audit Logging**: Centralized tracking
 6. **Type Safety**: Clear validation rules
 7. **Proper Table Usage**: Component status now updates mapping table instead of component details
+8. **Flexible SKU Updates**: SKU information can be updated without requiring components array
+
+## SKU Update Flexibility
+
+The `PUT /sku-details/update/:sku_code` endpoint now supports flexible updates:
+
+### **SKU Info Only Update** ✅
+```json
+{
+  "sku_description": "Updated Description",
+  "sku_reference": "NEW-REF-001"
+}
+// No components needed - works perfectly!
+```
+
+### **SKU Info + Component Update** ✅
+```json
+{
+  "sku_description": "Updated Description",
+  "components": [
+    {
+      "component_code": "C001",
+      "version": 1
+    }
+  ]
+}
+// Components will be updated along with SKU info
+```
+
+### **SKU Type Change to Internal** ✅
+```json
+{
+  "skutype": "internal"
+}
+// All component mappings will be removed
+```
+
+### **SKU Type Change to External** ✅
+```json
+{
+  "skutype": "external",
+  "components": []  // Empty array allowed - removes all mappings
+}
+// Can be external without components
+```
 
 ## Frontend Integration
 

@@ -515,85 +515,69 @@ async function updateSkuDetailBySkuCodeController(request, reply) {
       return reply.code(404).send({ success: false, message: 'SKU detail not found' });
     }
     
-    // Handle component mapping updates using sdp_sku_component_mapping_details table
-    let componentMappingResults = null;
+    // Handle component mapping updates only if components array is provided
+    let componentMappingResults = {};
     
     const cm_code = existingSkuData.cm_code;
-         // console.log('🔍 === EXISTING SKU DATA ===');
-     // console.log('CM Code from existing SKU:', cm_code);
-     // console.log('Existing SKU data:', JSON.stringify(existingSkuData, null, 2));
     
-    if (components && Array.isArray(components) && components.length > 0) {
-             // console.log('🔍 === PROCESSING COMPONENTS FOR MAPPING UPDATE ===');
-       // console.log('Components count:', components.length);
-       // console.log('Components data:', JSON.stringify(components, null, 2));
-       // console.log('SKU Type:', skutype);
-      
-                     // Step A: DELETE all existing mappings for this cm_code + sku_code combination
-        const deletedMappings = await deleteAllMappingsForCMAndSKU(cm_code, sku_code, 'REPLACED', 'admin');
-        // console.log('✅ Deleted existing mappings:', deletedMappings);
+    if (components && Array.isArray(components)) {
+      // Components array provided - handle component mapping updates
+      if (skutype === 'internal') {
+        // console.log('🔍 === SKU TYPE CHANGED TO INTERNAL ===');
+        // console.log('Removing all component mappings for internal SKU');
         
-        // Step B: INSERT new mapping records based on components array
-        const insertedMappings = await insertNewMappingsForCMAndSKU(cm_code, sku_code, components, 'REPLACED_MAPPING', 'admin');
-       // console.log('✅ Inserted new mappings:', insertedMappings);
-      
-             // Validate SKU type logic
-       if (skutype === 'internal') {
-         // console.log('⚠️ WARNING: Internal SKU should not have components - but components provided');
-       } else if (skutype === 'external') {
-         // console.log('✅ External SKU with components - correct configuration');
-       } else {
-         // console.log('ℹ️ SKU type not specified or changed - processing components anyway');
-       }
-      
-      componentMappingResults = {
-        deleted_mappings: deletedMappings,
-        inserted_mappings: insertedMappings,
-        action: 'replaced_all_mappings',
-        sku_type: skutype,
-        validation: 'components_processed'
-      };
-      
-         } else if (skutype === 'internal') {
-       // console.log('🔍 === SKU TYPE CHANGED TO INTERNAL ===');
-       // console.log('Removing all component mappings for internal SKU');
-      
-             // DELETE all mappings for internal SKU (no component relationships)
-       const deletedMappings = await deleteAllMappingsForCMAndSKU(cm_code, sku_code, 'INTERNAL_SKU_CONVERSION', 'admin');
-      
-      componentMappingResults = {
-        deleted_mappings: deletedMappings,
-        inserted_mappings: [],
-        action: 'removed_all_mappings_for_internal_sku'
-      };
-      
-         } else if (skutype === 'external') {
-       // console.log('🔍 === SKU TYPE CHANGED TO EXTERNAL ===');
-       
-       if (components && Array.isArray(components) && components.length > 0) {
-         // console.log('✅ External SKU with components - DELETE old + INSERT new');
-         // console.log('Components count:', components.length);
+        // DELETE all mappings for internal SKU (no component relationships)
+        const deletedMappings = await deleteAllMappingsForCMAndSKU(cm_code, sku_code, 'INTERNAL_SKU_CONVERSION', 'admin');
         
-                 // External SKU with components - DELETE old + INSERT new
-         const deletedMappings = await deleteAllMappingsForCMAndSKU(cm_code, sku_code, 'EXTERNAL_SKU_UPDATE', 'admin');
-         const insertedMappings = await insertNewMappingsForCMAndSKU(cm_code, sku_code, components, 'EXTERNAL_SKU_UPDATE', 'admin');
+        componentMappingResults = {
+          deleted_mappings: deletedMappings,
+          inserted_mappings: [],
+          action: 'removed_all_mappings_for_internal_sku'
+        };
+        
+      } else if (skutype === 'external') {
+        // console.log('🔍 === SKU TYPE CHANGED TO EXTERNAL ===');
+        
+        if (components.length > 0) {
+          // console.log('✅ External SKU with components - DELETE old + INSERT new');
+          // console.log('Components count:', components.length);
+          
+          // External SKU with components - DELETE old + INSERT new
+          const deletedMappings = await deleteAllMappingsForCMAndSKU(cm_code, sku_code, 'EXTERNAL_SKU_UPDATE', 'admin');
+          const insertedMappings = await insertNewMappingsForCMAndSKU(cm_code, sku_code, components, 'EXTERNAL_SKU_UPDATE', 'admin');
+          
+          componentMappingResults = {
+            deleted_mappings: deletedMappings,
+            inserted_mappings: insertedMappings,
+            action: 'external_sku_mappings_updated'
+          };
+          
+        } else {
+          // console.log('⚠️ External SKU with empty components array - removing all mappings');
+          // External SKU with empty components - remove all mappings
+          const deletedMappings = await deleteAllMappingsForCMAndSKU(cm_code, sku_code, 'EXTERNAL_SKU_NO_COMPONENTS', 'admin');
+          
+          componentMappingResults = {
+            deleted_mappings: deletedMappings,
+            inserted_mappings: [],
+            action: 'external_sku_mappings_removed_no_components'
+          };
+        }
+      } else {
+        // console.log('🔍 === COMPONENTS ARRAY PROVIDED - SKU INFO + COMPONENT UPDATE ===');
+        // Components provided but no SKU type change - update component mappings
+        const deletedMappings = await deleteAllMappingsForCMAndSKU(cm_code, sku_code, 'COMPONENT_MAPPING_UPDATE', 'admin');
+        const insertedMappings = await insertNewMappingsForCMAndSKU(cm_code, sku_code, components, 'COMPONENT_MAPPING_UPDATE', 'admin');
         
         componentMappingResults = {
           deleted_mappings: deletedMappings,
           inserted_mappings: insertedMappings,
-          action: 'external_sku_mappings_updated'
+          action: 'component_mappings_updated'
         };
-        
-             } else {
-         // console.log('❌ External SKU without components - returning error');
-         // External SKU without components - return error
-        return reply.code(400).send({ 
-          success: false, 
-          message: 'External SKU requires components array with data' 
-        });
       }
-         } else {
-       // console.log('🔍 === NO COMPONENTS ARRAY - SKU INFO ONLY UPDATE ===');
+    } else {
+      // console.log('🔍 === NO COMPONENTS ARRAY - SKU INFO ONLY UPDATE ===');
+      // No components array provided - SKU info only update
       componentMappingResults = {
         deleted_mappings: [],
         inserted_mappings: [],
