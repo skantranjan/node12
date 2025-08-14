@@ -730,50 +730,59 @@ async function toggleUniversalStatus(type, id, isActive) {
 
     let result;
 
-         if (type === 'sku') {
-       // Update SKU status
-       const query = `
-         UPDATE public.sdp_skudetails 
-         SET is_active = $1
-         WHERE id = $2
-         RETURNING id, sku_code, sku_description, is_active, created_date;
-       `;
-       const skuResult = await pool.query(query, [isActive, id]);
-       
-       if (skuResult.rows.length === 0) {
-         throw new Error(`SKU with ID ${id} not found`);
-       }
+    if (type === 'sku') {
+      // Update SKU status in sdp_skudetails table
+      const query = `
+        UPDATE public.sdp_skudetails 
+        SET is_active = $1
+        WHERE id = $2
+        RETURNING id, sku_code, sku_description, is_active, created_date;
+      `;
+      const skuResult = await pool.query(query, [isActive, id]);
+      
+      if (skuResult.rows.length === 0) {
+        throw new Error(`SKU with ID ${id} not found`);
+      }
 
-       result = {
-         id: skuResult.rows[0].id,
-         type: 'sku',
-         is_active: skuResult.rows[0].is_active,
-         updated_at: new Date().toISOString(),
-         sku_code: skuResult.rows[0].sku_code,
-         sku_description: skuResult.rows[0].sku_description
-       };
+      result = {
+        id: skuResult.rows[0].id,
+        type: 'sku',
+        is_active: skuResult.rows[0].is_active,
+        updated_at: new Date().toISOString(),
+        sku_code: skuResult.rows[0].sku_code,
+        sku_description: skuResult.rows[0].sku_description
+      };
 
-         } else if (type === 'component') {
-       // Update Component status
-       const query = `
-         UPDATE public.sdp_component_details 
-         SET is_active = $1
-         WHERE id = $2
-         RETURNING id, component_code, component_description, is_active, created_date;
-       `;
-       const compResult = await pool.query(query, [isActive, id]);
-       
-       if (compResult.rows.length === 0) {
-         throw new Error(`Component with ID ${id} not found`);
-       }
+    } else if (type === 'component') {
+      // Update Component status in sdp_sku_component_mapping_details table
+      const query = `
+        UPDATE public.sdp_sku_component_mapping_details 
+        SET is_active = $1
+        WHERE id = $2
+        RETURNING id, cm_code, sku_code, component_code, version, component_packaging_type_id, period_id, component_valid_from, component_valid_to, is_active, created_by, created_at;
+      `;
+      const compResult = await pool.query(query, [isActive, id]);
+      
+      if (compResult.rows.length === 0) {
+        throw new Error(`Component mapping with ID ${id} not found`);
+      }
 
-       result = {
-         id: compResult.rows[0].id,
-         type: 'component',
-         is_active: compResult.rows[0].is_active,
-         updated_at: new Date().toISOString(),
-         component_name: compResult.rows[0].component_code
-       };
+      result = {
+        id: compResult.rows[0].id,
+        type: 'component',
+        is_active: compResult.rows[0].is_active,
+        updated_at: new Date().toISOString(),
+        cm_code: compResult.rows[0].cm_code,
+        sku_code: compResult.rows[0].sku_code,
+        component_code: compResult.rows[0].component_code,
+        version: compResult.rows[0].version,
+        component_packaging_type_id: compResult.rows[0].component_packaging_type_id,
+        period_id: compResult.rows[0].period_id,
+        component_valid_from: compResult.rows[0].component_valid_from,
+        component_valid_to: compResult.rows[0].component_valid_to,
+        created_by: compResult.rows[0].created_by,
+        created_at: compResult.rows[0].created_at
+      };
     }
 
     return result;
