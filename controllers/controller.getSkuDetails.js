@@ -1179,13 +1179,16 @@ async function exportExcelController(request, reply) {
       count: componentData.length,
       cm_code: cm_code,
       message: componentData.length > 0 
-        ? `Found ${componentData.length} component record(s) for CM: ${cm_code}`
-        : `No component records found for CM: ${cm_code}`,
+        ? `Found ${componentData.length} record(s) for CM: ${cm_code}`
+        : `No records found for CM: ${cm_code}`,
       data: componentData,
       summary: {
         total_records: componentData.length,
-        unique_components: [...new Set(componentData.map(item => item.component_code))].length,
         unique_skus: [...new Set(componentData.map(item => item.sku_code))].length,
+        skus_with_components: componentData.filter(item => item.mapping_id !== null).length,
+        skus_without_components: componentData.filter(item => item.mapping_id === null).length,
+        unique_components: [...new Set(componentData.filter(item => item.component_code).map(item => item.component_code))].length,
+        active_skus: componentData.filter(item => item.sku_is_active).length,
         active_mappings: componentData.filter(item => item.mapping_is_active).length,
         active_components: componentData.filter(item => item.component_is_active).length
       }
@@ -1395,20 +1398,37 @@ async function getAuditLogController(request, reply) {
 
 /**
  * Get comprehensive component data for a CM code (for Excel export)
- * Includes both mapping table and component details with duplicates
+ * Includes ALL SKUs for the CM, with component data when available
+ * Uses LEFT JOINs to ensure no SKUs are missed
  */
 async function getComponentDataForCMExport(cmCode) {
   try {
     const query = `
       SELECT 
-        -- Mapping table data
+        -- SKU Details (always present)
+        sd.id as sku_id,
+        sd.sku_code,
+        sd.sku_description,
+        sd.cm_code,
+        sd.cm_description,
+        sd.sku_reference,
+        sd.is_active as sku_is_active,
+        sd.created_by as sku_created_by,
+        sd.created_date as sku_created_date,
+        sd.period,
+        sd.purchased_quantity,
+        sd.sku_reference_check,
+        sd.formulation_reference,
+        sd.dual_source_sku,
+        sd.site,
+        sd.skutype,
+        sd.bulk_expert,
+        
+        -- Mapping table data (may be NULL if no components)
         m.id as mapping_id,
-        m.cm_code,
-        m.sku_code,
-        m.component_code,
         m.version as mapping_version,
         m.component_packaging_type_id as mapping_packaging_type_id,
-        m.period_id,
+        m.period_id as mapping_period_id,
         m.component_valid_from as mapping_valid_from,
         m.component_valid_to as mapping_valid_to,
         m.is_active as mapping_is_active,
@@ -1416,9 +1436,10 @@ async function getComponentDataForCMExport(cmCode) {
         m.created_at as mapping_created_at,
         m.updated_at as mapping_updated_at,
         
-        -- Component details data
+        -- Component details data (may be NULL if no components)
         cd.id as component_id,
-        cd.formulation_reference,
+        cd.component_code,
+        cd.formulation_reference as component_formulation_reference,
         cd.material_type_id,
         cd.components_reference,
         cd.component_description,
@@ -1461,14 +1482,17 @@ async function getComponentDataForCMExport(cmCode) {
         cd.year,
         cd.component_unit_weight_id,
         cd.periods
-      FROM public.sdp_sku_component_mapping_details m
-      INNER JOIN public.sdp_component_details cd 
+      FROM public.sdp_skudetails sd
+      LEFT JOIN public.sdp_sku_component_mapping_details m 
+        ON sd.sku_code = m.sku_code 
+        AND sd.cm_code = m.cm_code
+      LEFT JOIN public.sdp_component_details cd 
         ON m.component_code = cd.component_code 
         AND cd.is_active = true
-      WHERE m.cm_code = $1
-      ORDER BY m.cm_code ASC, m.sku_code ASC, m.component_code ASC, m.version ASC, 
-               m.component_packaging_type_id ASC, m.period_id ASC, 
-               m.component_valid_from ASC, m.component_valid_to ASC;
+      WHERE sd.cm_code = $1
+      ORDER BY sd.sku_code ASC, m.component_code ASC NULLS FIRST, m.version ASC NULLS FIRST, 
+               m.component_packaging_type_id ASC NULLS FIRST, m.period_id ASC NULLS FIRST, 
+               m.component_valid_from ASC NULLS FIRST, m.component_valid_to ASC NULLS FIRST;
     `;
     
     const result = await pool.query(query, [cmCode]);
