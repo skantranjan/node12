@@ -1157,12 +1157,14 @@ async function toggleUniversalStatusController(request, reply) {
  */
 async function exportExcelController(request, reply) {
   try {
-    const { cm_code } = request.body;
+    const { cm_code, reporting_period, sku_code } = request.body;
     
     // console.log('📊 === EXPORT EXCEL REQUEST ===');
     // console.log('CM Code:', cm_code);
+    // console.log('Reporting Period:', reporting_period);
+    // console.log('SKU Code:', sku_code);
     
-    // Validate cm_code
+    // Validate cm_code (required)
     if (!cm_code || cm_code.trim() === '') {
       return reply.code(400).send({
         success: false,
@@ -1170,17 +1172,21 @@ async function exportExcelController(request, reply) {
       });
     }
     
-    // Get comprehensive component data for the CM code
-    const componentData = await getComponentDataForCMExport(cm_code);
+    // Get comprehensive component data for the CM code with optional filters
+    const componentData = await getComponentDataForCMExport(cm_code, reporting_period, sku_code);
     
     // Always return success with data (empty array if no results found)
     reply.code(200).send({
       success: true,
       count: componentData.length,
       cm_code: cm_code,
+      filters_applied: {
+        reporting_period: reporting_period || null,
+        sku_code: sku_code || null
+      },
       message: componentData.length > 0 
-        ? `Found ${componentData.length} record(s) for CM: ${cm_code}`
-        : `No records found for CM: ${cm_code}`,
+        ? `Found ${componentData.length} record(s) for CM: ${cm_code}${reporting_period ? ` with period: ${reporting_period}` : ''}${sku_code ? ` for SKU: ${sku_code}` : ''}`
+        : `No records found for CM: ${cm_code}${reporting_period ? ` with period: ${reporting_period}` : ''}${sku_code ? ` for SKU: ${sku_code}` : ''}`,
       data: componentData,
       summary: {
         total_records: componentData.length,
@@ -1200,7 +1206,11 @@ async function exportExcelController(request, reply) {
       success: false,
       message: 'Failed to fetch component data for Excel export',
       error: error.message,
-      cm_code: request.body?.cm_code
+      cm_code: request.body?.cm_code,
+      filters_applied: {
+        reporting_period: request.body?.reporting_period || null,
+        sku_code: request.body?.sku_code || null
+      }
     });
   }
 }
@@ -1400,9 +1410,29 @@ async function getAuditLogController(request, reply) {
  * Get comprehensive component data for a CM code (for Excel export)
  * Includes ALL SKUs for the CM, with component data when available
  * Uses LEFT JOINs to ensure no SKUs are missed
+ * Supports optional filtering by reporting_period and sku_code
  */
-async function getComponentDataForCMExport(cmCode) {
+async function getComponentDataForCMExport(cmCode, reporting_period, sku_code) {
   try {
+    // Build dynamic WHERE conditions
+    let whereConditions = [`sd.cm_code = $1`];
+    let queryParams = [cmCode];
+    let paramIndex = 2;
+    
+    // Add period filter if provided
+    if (reporting_period && reporting_period.trim() !== '') {
+      whereConditions.push(`sd.period = $${paramIndex++}`);
+      queryParams.push(reporting_period);
+    }
+    
+    // Add SKU filter if provided
+    if (sku_code && sku_code.trim() !== '') {
+      whereConditions.push(`sd.sku_code = $${paramIndex++}`);
+      queryParams.push(sku_code);
+    }
+    
+    const whereClause = whereConditions.join(' AND ');
+    
     const query = `
       SELECT 
         -- SKU Details (always present)
@@ -1489,13 +1519,13 @@ async function getComponentDataForCMExport(cmCode) {
       LEFT JOIN public.sdp_component_details cd 
         ON m.component_code = cd.component_code 
         AND cd.is_active = true
-      WHERE sd.cm_code = $1
+      WHERE ${whereClause}
       ORDER BY sd.sku_code ASC, m.component_code ASC NULLS FIRST, m.version ASC NULLS FIRST, 
                m.component_packaging_type_id ASC NULLS FIRST, m.period_id ASC NULLS FIRST, 
                m.component_valid_from ASC NULLS FIRST, m.component_valid_to ASC NULLS FIRST;
     `;
     
-    const result = await pool.query(query, [cmCode]);
+    const result = await pool.query(query, queryParams);
     return result.rows;
   } catch (error) {
     console.error('Error in getComponentDataForCMExport:', error);
