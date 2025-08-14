@@ -1159,59 +1159,45 @@ async function exportExcelController(request, reply) {
   try {
     const { cm_code } = request.body;
     
-         // console.log('📊 === EXPORT EXCEL REQUEST ===');
-     // console.log('CM Code:', cm_code);
-     
-     // Validate cm_code
-     if (!cm_code || cm_code.trim() === '') {
-       return reply.code(400).send({
-         success: false,
-         message: 'cm_code is required in request body'
-       });
-     }
-     
-     // Get data for the specified CM code
-     const skuDetails = await getSkuDetailsByCMCode(cm_code);
-     
-     if (!skuDetails || skuDetails.length === 0) {
-       return reply.code(404).send({
-         success: false,
-         message: `No data found for CM code: ${cm_code}`
-       });
-     }
-     
-     // Get mapping data for the CM code
-     const mappingData = await getMappingDataByCMCode(cm_code);
-     
-     // Prepare Excel data structure
-     const excelData = {
-       cm_code: cm_code,
-       export_date: new Date().toISOString(),
-       sku_count: skuDetails.length,
-       mapping_count: mappingData.length,
-       data: {
-         skus: skuDetails,
-         mappings: mappingData
-       }
-     };
-     
-     // console.log('✅ Excel export data prepared successfully');
-     // console.log('SKU Count:', skuDetails.length);
-     // console.log('Mapping Count:', mappingData.length);
+    // console.log('📊 === EXPORT EXCEL REQUEST ===');
+    // console.log('CM Code:', cm_code);
     
+    // Validate cm_code
+    if (!cm_code || cm_code.trim() === '') {
+      return reply.code(400).send({
+        success: false,
+        message: 'cm_code is required in request body'
+      });
+    }
+    
+    // Get comprehensive component data for the CM code
+    const componentData = await getComponentDataForCMExport(cm_code);
+    
+    // Always return success with data (empty array if no results found)
     reply.code(200).send({
       success: true,
-      message: 'Excel export data prepared successfully',
-      data: excelData,
-      download_ready: true
+      count: componentData.length,
+      cm_code: cm_code,
+      message: componentData.length > 0 
+        ? `Found ${componentData.length} component record(s) for CM: ${cm_code}`
+        : `No component records found for CM: ${cm_code}`,
+      data: componentData,
+      summary: {
+        total_records: componentData.length,
+        unique_components: [...new Set(componentData.map(item => item.component_code))].length,
+        unique_skus: [...new Set(componentData.map(item => item.sku_code))].length,
+        active_mappings: componentData.filter(item => item.mapping_is_active).length,
+        active_components: componentData.filter(item => item.component_is_active).length
+      }
     });
     
   } catch (error) {
     console.error('❌ Error in export-excel controller:', error);
     reply.code(500).send({
       success: false,
-      message: 'Failed to prepare Excel export',
-      error: error.message
+      message: 'Failed to fetch component data for Excel export',
+      error: error.message,
+      cm_code: request.body?.cm_code
     });
   }
 }
@@ -1404,6 +1390,92 @@ async function getAuditLogController(request, reply) {
       message: 'Failed to retrieve audit log data',
       error: error.message
     });
+  }
+}
+
+/**
+ * Get comprehensive component data for a CM code (for Excel export)
+ * Includes both mapping table and component details with duplicates
+ */
+async function getComponentDataForCMExport(cmCode) {
+  try {
+    const query = `
+      SELECT 
+        -- Mapping table data
+        m.id as mapping_id,
+        m.cm_code,
+        m.sku_code,
+        m.component_code,
+        m.version as mapping_version,
+        m.component_packaging_type_id as mapping_packaging_type_id,
+        m.period_id,
+        m.component_valid_from as mapping_valid_from,
+        m.component_valid_to as mapping_valid_to,
+        m.is_active as mapping_is_active,
+        m.created_by as mapping_created_by,
+        m.created_at as mapping_created_at,
+        m.updated_at as mapping_updated_at,
+        
+        -- Component details data
+        cd.id as component_id,
+        cd.formulation_reference,
+        cd.material_type_id,
+        cd.components_reference,
+        cd.component_description,
+        cd.component_valid_from as component_valid_from,
+        cd.component_valid_to as component_valid_to,
+        cd.component_material_group,
+        cd.component_quantity,
+        cd.component_uom_id,
+        cd.component_base_quantity,
+        cd.component_base_uom_id,
+        cd.percent_w_w,
+        cd.evidence,
+        cd.component_packaging_type_id as component_packaging_type_id,
+        cd.component_packaging_material,
+        cd.helper_column,
+        cd.component_unit_weight,
+        cd.weight_unit_measure_id,
+        cd.percent_mechanical_pcr_content,
+        cd.percent_mechanical_pir_content,
+        cd.percent_chemical_recycled_content,
+        cd.percent_bio_sourced,
+        cd.material_structure_multimaterials,
+        cd.component_packaging_color_opacity,
+        cd.component_packaging_level_id,
+        cd.component_dimensions,
+        cd.packaging_specification_evidence,
+        cd.evidence_of_recycled_or_bio_source,
+        cd.last_update_date,
+        cd.category_entry_id,
+        cd.data_verification_entry_id,
+        cd.user_id,
+        cd.signed_off_by,
+        cd.signed_off_date,
+        cd.mandatory_fields_completion_status,
+        cd.evidence_provided,
+        cd.document_status,
+        cd.is_active as component_is_active,
+        cd.created_by as component_created_by,
+        cd.created_date as component_created_date,
+        cd.year,
+        cd.component_unit_weight_id,
+        cd.periods
+      FROM public.sdp_sku_component_mapping_details m
+      INNER JOIN public.sdp_component_details cd 
+        ON m.component_code = cd.component_code 
+        AND cd.is_active = true
+      WHERE m.cm_code = $1
+      ORDER BY m.cm_code ASC, m.sku_code ASC, m.component_code ASC, m.version ASC, 
+               m.component_packaging_type_id ASC, m.period_id ASC, 
+               m.component_valid_from ASC, m.component_valid_to ASC;
+    `;
+    
+    const result = await pool.query(query, [cmCode]);
+    return result.rows;
+  } catch (error) {
+    console.error('Error in getComponentDataForCMExport:', error);
+    throw error;
   }
 }
 
