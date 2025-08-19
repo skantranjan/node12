@@ -28,6 +28,7 @@ const getComponentBySkuReferenceRoutes = require('./routes/getComponentBySkuRefe
 const regionMasterRoutes = require('./routes/regionMaster.routes');
 const skuReferenceRoutes = require('./routes/skuReference.routes');
 const addPmRoutes = require('./routes/addpm.routes');
+const copySkuRoutes = require('./routes/copySku.routes');
 
 // Register multipart plugin for file uploads (MUST be registered before routes)
 fastify.register(fastifyMultipart, {
@@ -108,6 +109,9 @@ fastify.register(addPmRoutes);
 
 // Register SKU Reference routes
 fastify.register(skuReferenceRoutes);
+
+// Register Copy SKU routes
+fastify.register(copySkuRoutes);
 
 // Add JWT middleware globally
 //fastify.addHook('preHandler', jwtMiddleware);
