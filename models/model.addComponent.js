@@ -1,305 +1,221 @@
 const pool = require('../config/db.config');
 
 /**
- * Check for duplicate component_code across both tables
+ * Check if component_code exists in sdp_component_details table
  * @param {string} componentCode - The component code to check
- * @returns {Promise<Object>} Object with duplicate info and table details
+ * @returns {Promise<Object|null>} Component data if exists, null if not
  */
-async function checkDuplicateComponentCode(componentCode) {
+async function checkComponentCodeExists(componentCode) {
   try {
-    console.log(`🔍 Checking for duplicate component_code: ${componentCode}`);
-    
-    // Check in sdp_component_details table
-    const componentDetailsQuery = `
-      SELECT id, cm_code, sku_code, component_code, component_description, 
-             component_valid_from, component_valid_to, is_active
-      FROM sdp_component_details 
-      WHERE component_code = $1 AND is_active = true
-    `;
-    
-    console.log('📋 Executing query on sdp_component_details table...');
-    const componentDetailsResult = await pool.query(componentDetailsQuery, [componentCode]);
-    console.log(`✅ sdp_component_details query successful. Found ${componentDetailsResult.rows.length} records.`);
-    
-    // Check in sdp_sku_component_mapping_details table
-    // Note: This table doesn't have component_description column
-    const mappingDetailsQuery = `
-      SELECT id, cm_code, sku_code, component_code, version, component_packaging_type_id, 
-             period_id, component_valid_from, component_valid_to, created_by, created_at, 
-             updated_at, is_active
-      FROM sdp_sku_component_mapping_details 
-      WHERE component_code = $1 AND is_active = true
-    `;
-    
-    console.log('📋 Executing query on sdp_sku_component_mapping_details table...');
-    const mappingDetailsResult = await pool.query(mappingDetailsQuery, [componentCode]);
-    console.log(`✅ sdp_sku_component_mapping_details query successful. Found ${mappingDetailsResult.rows.length} records.`);
-    
-    const duplicates = [];
-    
-    // Check component_details table
-    if (componentDetailsResult.rows.length > 0) {
-      console.log('📋 Processing duplicates from sdp_component_details...');
-      componentDetailsResult.rows.forEach((row, index) => {
-        console.log(`  Record ${index + 1}: ID=${row.id}, CM=${row.cm_code}, SKU=${row.sku_code}`);
-        duplicates.push({
-          table: 'sdp_component_details',
-          id: row.id,
-          cm_code: row.cm_code,
-          sku_code: row.sku_code,
-          component_code: row.component_code,
-          component_description: row.component_description || 'No description',
-          component_valid_from: row.component_valid_from,
-          component_valid_to: row.component_valid_to
-        });
-      });
-    }
-    
-    // Check mapping_details table
-    if (mappingDetailsResult.rows.length > 0) {
-      console.log('📋 Processing duplicates from sdp_sku_component_mapping_details...');
-      mappingDetailsResult.rows.forEach((row, index) => {
-        console.log(`  Record ${index + 1}: ID=${row.id}, CM=${row.cm_code}, SKU=${row.sku_code}`);
-        duplicates.push({
-          table: 'sdp_sku_component_mapping_details',
-          id: row.id,
-          cm_code: row.cm_code,
-          sku_code: row.sku_code,
-          component_code: row.component_code,
-          component_description: 'No description available', // This table doesn't have this column
-          component_valid_from: row.component_valid_from,
-          component_valid_to: row.component_valid_to,
-          version: row.version,
-          component_packaging_type_id: row.component_packaging_type_id,
-          period_id: row.period_id
-        });
-      });
-    }
-    
-    console.log(`✅ Duplicate check complete. Found ${duplicates.length} duplicates.`);
-    
-    return {
-      hasDuplicates: duplicates.length > 0,
-      duplicates: duplicates,
-      count: duplicates.length
-    };
-    
+    const query = 'SELECT id, component_code FROM sdp_component_details WHERE component_code = $1 AND is_active = true';
+    const result = await pool.query(query, [componentCode]);
+    return result.rows[0] || null;
   } catch (error) {
-    console.error('❌ Error in checkDuplicateComponentCode:', error);
-    console.error('❌ Error details:', {
-      message: error.message,
-      code: error.code,
-      detail: error.detail,
-      hint: error.hint,
-      where: error.where
-    });
-    throw error; // Re-throw to be handled by the controller
+    throw new Error(`Error checking component code: ${error.message}`);
   }
 }
 
 /**
- * Check for duplicate component_description in sdp_component_details table
- * @param {string} componentDescription - The component description to check
- * @returns {Promise<Object>} Object with duplicate info and table details
+ * Check if mapping already exists in sdp_sku_component_mapping_details table
+ * @param {Object} data - Mapping data to check
+ * @returns {Promise<Object|null>} Existing mapping if found, null if not
  */
-async function checkDuplicateComponentDescription(componentDescription) {
+async function checkMappingExists(data) {
   try {
-    console.log(`🔍 Checking for duplicate component_description: "${componentDescription}"`);
-    
-    // Check in sdp_component_details table for exact match
-    const componentDetailsQuery = `
-      SELECT id, cm_code, sku_code, component_code, component_description, 
-             component_valid_from, component_valid_to, is_active
-      FROM sdp_component_details 
-      WHERE LOWER(TRIM(component_description)) = LOWER(TRIM($1)) 
-        AND is_active = true
+    const query = `
+      SELECT * FROM sdp_sku_component_mapping_details 
+      WHERE cm_code = $1 AND sku_code = $2 AND component_code = $3 AND version = $4 AND period_id = $5
     `;
-    
-    console.log('📋 Executing query on sdp_component_details table for description...');
-    const componentDetailsResult = await pool.query(componentDetailsQuery, [componentDescription]);
-    console.log(`✅ component_description query successful. Found ${componentDetailsResult.rows.length} records.`);
-    
-    const duplicates = [];
-    
-    // Check component_details table
-    if (componentDetailsResult.rows.length > 0) {
-      console.log('📋 Processing duplicates from sdp_component_details for description...');
-      componentDetailsResult.rows.forEach((row, index) => {
-        console.log(`  Record ${index + 1}: ID=${row.id}, CM=${row.cm_code}, SKU=${row.sku_code}, Description="${row.component_description}"`);
-        duplicates.push({
-          table: 'sdp_component_details',
-          id: row.id,
-          cm_code: row.cm_code,
-          sku_code: row.sku_code,
-          component_code: row.component_code,
-          component_description: row.component_description,
-          component_valid_from: row.component_valid_from,
-          component_valid_to: row.component_valid_to
-        });
-      });
-    }
-    
-    console.log(`✅ Description duplicate check complete. Found ${duplicates.length} duplicates.`);
-    
-    return {
-      hasDuplicates: duplicates.length > 0,
-      duplicates: duplicates,
-      count: duplicates.length
-    };
-    
+    const result = await pool.query(query, [data.cm_code, data.sku_code, data.component_code, data.version, data.period_id]);
+    return result.rows[0] || null;
   } catch (error) {
-    console.error('❌ Error in checkDuplicateComponentDescription:', error);
-    console.error('❌ Error details:', {
-      message: error.message,
-      code: error.code,
-      detail: error.detail,
-      hint: error.hint,
-      where: error.where
-    });
-    throw error; // Re-throw to be handled by the controller
+    throw new Error(`Error checking mapping: ${error.message}`);
   }
 }
 
 /**
- * Check for duplicate component records (existing logic)
- * @param {Object} data - The component data to check
- * @returns {Promise<boolean>} True if duplicate exists, false otherwise
- */
-async function checkDuplicateComponent(data) {
-  const query = `
-    SELECT id FROM sdp_component_details 
-    WHERE cm_code = $1 
-      AND sku_code = $2 
-      AND component_code = $3 
-      AND component_valid_from = $4 
-      AND component_valid_to = $5
-      AND is_active = true
-  `;
-  
-  const values = [
-    data.cm_code,
-    data.sku_code,
-    data.component_code,
-    data.component_valid_from,
-    data.component_valid_to
-  ];
-  
-  const result = await pool.query(query, values);
-  return result.rows.length > 0;
-}
-
-/**
- * Insert a new component detail record
+ * Insert component detail into sdp_component_details table
+ * @param {Object} data - Component data from UI form
+ * @returns {Promise<Object>} Inserted component record
  */
 async function insertComponentDetail(data) {
-  const query = `
-    INSERT INTO sdp_component_details (
-      sku_code, formulation_reference, material_type_id, components_reference, 
-      component_code, component_description, component_valid_from, component_valid_to, 
-      component_material_group, component_quantity, component_uom_id, component_base_quantity, 
-      component_base_uom_id, percent_w_w, evidence, component_packaging_type_id, 
-      component_packaging_material, helper_column, component_unit_weight, weight_unit_measure_id, 
-      percent_mechanical_pcr_content, percent_mechanical_pir_content, percent_chemical_recycled_content, 
-      percent_bio_sourced, material_structure_multimaterials, component_packaging_color_opacity, 
-      component_packaging_level_id, component_dimensions, packaging_specification_evidence, 
-      evidence_of_recycled_or_bio_source, last_update_date, category_entry_id, data_verification_entry_id, 
-      user_id, signed_off_by, signed_off_date, mandatory_fields_completion_status, evidence_provided, 
-      document_status, is_active, created_by, created_date, year, component_unit_weight_id, cm_code, periods
-    ) VALUES (
-      $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20,
-      $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39,
-      $40, $41, $42, $43, $44, $45, $46
-    ) RETURNING *
-  `;
-
-  const values = [
-    data.sku_code || null,
-    data.formulation_reference || null,
-    data.material_type_id || null,
-    data.components_reference || null,
-    data.component_code || null,
-    data.component_description || null,
-    data.component_valid_from || null,
-    data.component_valid_to || null,
-    data.component_material_group || null,
-    data.component_quantity || null,
-    data.component_uom_id || null,
-    data.component_base_quantity || null,
-    data.component_base_uom_id || null,
-    data.percent_w_w || null,
-    data.evidence || null,
-    data.component_packaging_type_id || null,
-    data.component_packaging_material || null,
-    data.helper_column || null,
-    data.component_unit_weight || null,
-    data.weight_unit_measure_id || null,
-    data.percent_mechanical_pcr_content || null,
-    data.percent_mechanical_pir_content || null,
-    data.percent_chemical_recycled_content || null,
-    data.percent_bio_sourced || null,
-    data.material_structure_multimaterials || null,
-    data.component_packaging_color_opacity || null,
-    data.component_packaging_level_id || null,
-    data.component_dimensions || null,
-    data.packaging_specification_evidence || null,
-    data.evidence_of_recycled_or_bio_source || null,
-    data.last_update_date || new Date(),
-    data.category_entry_id || null,
-    data.data_verification_entry_id || null,
-    data.user_id || null,
-    data.signed_off_by || null,
-    data.signed_off_date || null,
-    data.mandatory_fields_completion_status || null,
-    data.evidence_provided || null,
-    data.document_status || null,
-    data.is_active !== undefined ? data.is_active : true,
-    data.created_by || null,
-    data.created_date || new Date(),
-    data.year || null,
-    data.component_unit_weight_id || null,
-    data.cm_code || null,
-    data.periods || null
-  ];
-
-  const result = await pool.query(query, values);
-  return result.rows[0];
+  try {
+    const columns = [
+      'sku_code', 'formulation_reference', 'material_type_id', 'components_reference', 'component_code',
+      'component_description', 'component_valid_from', 'component_valid_to', 'component_material_group',
+      'component_quantity', 'component_uom_id', 'component_base_quantity', 'component_base_uom_id',
+      'percent_w_w', 'evidence', 'component_packaging_type_id', 'component_packaging_material',
+      'helper_column', 'component_unit_weight', 'weight_unit_measure_id', 'percent_mechanical_pcr_content',
+      'percent_mechanical_pir_content', 'percent_chemical_recycled_content', 'percent_bio_sourced',
+      'material_structure_multimaterials', 'component_packaging_color_opacity', 'component_packaging_level_id',
+      'component_dimensions', 'packaging_specification_evidence', 'evidence_of_recycled_or_bio_source',
+      'last_update_date', 'category_entry_id', 'data_verification_entry_id', 'user_id', 'signed_off_by',
+      'signed_off_date', 'mandatory_fields_completion_status', 'evidence_provided', 'document_status',
+      'is_active', 'created_by', 'created_date', 'year', 'component_unit_weight_id', 'cm_code', 'periods'
+    ];
+    
+    const placeholders = columns.map((_, index) => `$${index + 1}`).join(', ');
+    const query = `INSERT INTO sdp_component_details (${columns.join(', ')}) VALUES (${placeholders}) RETURNING *`;
+    
+    const values = [
+      data.sku_code, data.formulation_reference, data.material_type_id, data.components_reference,
+      data.component_code, data.component_description, data.component_valid_from, data.component_valid_to,
+      data.component_material_group, data.component_quantity, data.component_uom_id, data.component_base_quantity,
+      data.component_base_uom_id, data.percent_w_w, data.evidence, data.component_packaging_type_id,
+      data.component_packaging_material, data.helper_column, data.component_unit_weight, data.weight_unit_measure_id,
+      data.percent_mechanical_pcr_content, data.percent_mechanical_pir_content, data.percent_chemical_recycled_content,
+      data.percent_bio_sourced, data.material_structure_multimaterials, data.component_packaging_color_opacity,
+      data.component_packaging_level_id, data.component_dimensions, data.packaging_specification_evidence,
+      data.evidence_of_recycled_or_bio_source, data.last_update_date, data.category_entry_id,
+      data.data_verification_entry_id, data.user_id, data.signed_off_by, data.signed_off_date,
+      data.mandatory_fields_completion_status, data.evidence_provided, data.document_status, data.is_active,
+      data.created_by, data.created_date, data.year, data.component_unit_weight_id, data.cm_code, data.periods
+    ];
+    
+    const result = await pool.query(query, values);
+    return result.rows[0];
+  } catch (error) {
+    throw new Error(`Error inserting component detail: ${error.message}`);
+  }
 }
 
 /**
- * Test function to verify table accessibility
- * @returns {Promise<Object>} Test results
+ * Insert component mapping into sdp_sku_component_mapping_details table
+ * @param {Object} data - Mapping data
+ * @returns {Promise<Object>} Inserted mapping record
  */
-async function testTableAccess() {
+async function insertComponentMapping(data) {
   try {
-    console.log('🧪 Testing table accessibility...');
+    const result = await checkMappingExists(data);
+    if (result) {
+      return result; // Return existing mapping
+    }
     
-    // Test sdp_component_details table
-    const testComponentDetails = await pool.query('SELECT COUNT(*) as count FROM sdp_component_details LIMIT 1');
-    console.log(`✅ sdp_component_details accessible. Count: ${testComponentDetails.rows[0].count}`);
+    const query = `
+      INSERT INTO sdp_sku_component_mapping_details 
+      (cm_code, sku_code, component_code, version, component_packaging_type_id, period_id, 
+       component_valid_from, component_valid_to, created_by, is_active) 
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) 
+      RETURNING *
+    `;
     
-    // Test sdp_sku_component_mapping_details table
-    const testMappingDetails = await pool.query('SELECT COUNT(*) as count FROM sdp_sku_component_mapping_details LIMIT 1');
-    console.log(`✅ sdp_sku_component_mapping_details accessible. Count: ${testMappingDetails.rows[0].count}`);
+    const values = [
+      data.cm_code, data.sku_code, data.component_code, data.version, data.component_packaging_type_id,
+      data.period_id, data.component_valid_from, data.component_valid_to, data.created_by, data.is_active
+    ];
     
-    return {
-      success: true,
-      componentDetailsCount: testComponentDetails.rows[0].count,
-      mappingDetailsCount: testMappingDetails.rows[0].count
-    };
-    
+    const insertResult = await pool.query(query, values);
+    return insertResult.rows[0];
   } catch (error) {
-    console.error('❌ Table accessibility test failed:', error);
-    return {
-      success: false,
-      error: error.message
-    };
+    throw new Error(`Error inserting component mapping: ${error.message}`);
+  }
+}
+
+/**
+ * Insert audit log into sdp_component_details_auditlog table
+ * @param {Object} data - Audit data including component_id
+ * @returns {Promise<Object>} Inserted audit record
+ */
+async function insertComponentAuditLog(data) {
+  try {
+    const columns = [
+      'component_id', 'sku_code', 'formulation_reference', 'material_type_id', 'components_reference',
+      'component_code', 'component_description', 'component_valid_from', 'component_valid_to',
+      'component_material_group', 'component_quantity', 'component_uom_id', 'component_base_quantity',
+      'component_base_uom_id', 'percent_w_w', 'evidence', 'component_packaging_type_id',
+      'component_packaging_material', 'helper_column', 'component_unit_weight', 'weight_unit_measure_id',
+      'percent_mechanical_pcr_content', 'percent_mechanical_pir_content', 'percent_chemical_recycled_content',
+      'percent_bio_sourced', 'material_structure_multimaterials', 'component_packaging_color_opacity',
+      'component_packaging_level_id', 'component_dimensions', 'packaging_specification_evidence',
+      'evidence_of_recycled_or_bio_source', 'last_update_date', 'category_entry_id',
+      'data_verification_entry_id', 'user_id', 'signed_off_by', 'signed_off_date',
+      'mandatory_fields_completion_status', 'evidence_provided', 'document_status', 'is_active',
+      'created_by', 'created_date', 'year', 'component_unit_weight_id', 'cm_code', 'periods'
+    ];
+    
+    const placeholders = columns.map((_, index) => `$${index + 1}`).join(', ');
+    const query = `INSERT INTO sdp_component_details_auditlog (${columns.join(', ')}) VALUES (${placeholders}) RETURNING *`;
+    
+    const values = [
+      data.component_id, data.sku_code, data.formulation_reference, data.material_type_id, data.components_reference,
+      data.component_code, data.component_description, data.component_valid_from, data.component_valid_to,
+      data.component_material_group, data.component_quantity, data.component_uom_id, data.component_base_quantity,
+      data.component_base_uom_id, data.percent_w_w, data.evidence, data.component_packaging_type_id,
+      data.component_packaging_material, data.helper_column, data.component_unit_weight, data.weight_unit_measure_id,
+      data.percent_mechanical_pcr_content, data.percent_mechanical_pir_content, data.percent_chemical_recycled_content,
+      data.percent_bio_sourced, data.material_structure_multimaterials, data.component_packaging_color_opacity,
+      data.component_packaging_level_id, data.component_dimensions, data.packaging_specification_evidence,
+      data.evidence_of_recycled_or_bio_source, data.last_update_date, data.category_entry_id,
+      data.data_verification_entry_id, data.user_id, data.signed_off_by, data.signed_off_date,
+      data.mandatory_fields_completion_status, data.evidence_provided, data.document_status, data.is_active,
+      data.created_by, data.created_date, data.year, data.component_unit_weight_id, data.cm_code, data.periods
+    ];
+    
+    const result = await pool.query(query, values);
+    return result.rows[0];
+  } catch (error) {
+    throw new Error(`Error inserting audit log: ${error.message}`);
+  }
+}
+
+async function insertEvidenceFile(data) {
+  try {
+    const query = `
+      INSERT INTO sdp_evidence 
+      (component_id, evidence_file_name, evidence_file_url, created_by, created_date, category) 
+      VALUES ($1, $2, $3, $4, $5, $6) 
+      RETURNING *
+    `;
+    
+    const values = [
+      data.component_id,
+      data.evidence_file_name,
+      data.evidence_file_url,
+      data.created_by,
+      data.created_date,
+      data.category
+    ];
+    
+    const result = await pool.query(query, values);
+    return result.rows[0];
+  } catch (error) {
+    throw new Error(`Error inserting evidence file: ${error.message}`);
+  }
+}
+
+/**
+ * Safe JSON stringify function to handle circular references
+ */
+function safeStringify(obj) {
+  try {
+    return JSON.stringify(obj, null, 2);
+  } catch (error) {
+    if (error.message.includes('circular')) {
+      // Handle circular references by creating a clean copy
+      const cleanObj = {};
+      Object.keys(obj).forEach(key => {
+        try {
+          if (typeof obj[key] === 'object' && obj[key] !== null) {
+            // For complex objects, just show the keys
+            cleanObj[key] = `[Object with keys: ${Object.keys(obj[key]).join(', ')}]`;
+          } else {
+            cleanObj[key] = obj[key];
+          }
+        } catch (e) {
+          cleanObj[key] = '[Circular Reference]';
+          }
+      });
+      return JSON.stringify(cleanObj, null, 2);
+    }
+    return `[Error serializing: ${error.message}]`;
   }
 }
 
 module.exports = { 
-  insertComponentDetail,
-  checkDuplicateComponent,
-  checkDuplicateComponentCode,
-  checkDuplicateComponentDescription,
-  testTableAccess
-}; 
+  checkComponentCodeExists, 
+  checkMappingExists, 
+  insertComponentDetail, 
+  insertComponentMapping, 
+  insertComponentAuditLog,
+  insertEvidenceFile
+};

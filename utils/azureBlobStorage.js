@@ -276,4 +276,97 @@ async function createVirtualFolders(year, cmCode, skuCode, componentCode) {
   }
 }
 
-module.exports = { uploadFilesToBlob, createVirtualFolders }; 
+/**
+ * Upload a single file to Azure Blob Storage
+ * @param {Buffer} fileBuffer - File buffer data
+ * @param {string} fileName - Original file name
+ * @param {string} mimetype - File MIME type
+ * @param {string} cmCode - CM Code
+ * @param {string} skuCode - SKU Code
+ * @param {string} componentCode - Component Code
+ * @param {string} year - Year
+ * @returns {Object} - Upload result with blob URL
+ */
+async function uploadSingleFile(fileBuffer, fileName, mimetype, cmCode, skuCode, componentCode, year) {
+  try {
+    console.log('🔧 === AZURE BLOB STORAGE - SINGLE FILE UPLOAD ===');
+    console.log(`📂 Container: ${containerName}`);
+    console.log(`📂 Account: ${accountName}`);
+    
+    // Construct blob URL inside the function
+    const constructedBlobUrl = `https://${accountName}.blob.core.windows.net`;
+    console.log(`📂 Blob URL: ${constructedBlobUrl}`);
+    
+    let blobServiceClient;
+    if (process.env.NODE_ENV === 'production' && process.env.AZURE_STORAGE_CONNECTION_STRING) {
+      // Use connection string for production
+      console.log(`🔑 Using Azure Storage Connection String`);
+      blobServiceClient = BlobServiceClient.fromConnectionString(process.env.AZURE_STORAGE_CONNECTION_STRING);
+    } else {
+      // Use credential-based authentication
+      console.log(`🔑 Using Azure Credentials`);
+      blobServiceClient = new BlobServiceClient(constructedBlobUrl, credential);
+    }
+    
+    const containerClient = blobServiceClient.getContainerClient(containerName);
+    
+    // Create unique filename with timestamp
+    const fileExtension = fileName.split('.').pop();
+    const timestamp = Date.now();
+    const uniqueFileName = `${fileName.split('.')[0]}_${timestamp}.${fileExtension}`;
+    
+    // Create folder structure: year/cmCode/skuCode/componentCode/evidence/
+    const folderPath = `${year}/${cmCode}/${skuCode}/${componentCode}/evidence/`;
+    const blobPath = `${folderPath}${uniqueFileName}`;
+    
+    console.log(`📁 Creating folder structure: ${folderPath}`);
+    console.log(`📄 Uploading file: ${blobPath}`);
+    console.log(`📊 File info: ${fileName}, size: ${fileBuffer.length} bytes`);
+    
+    // Validate file data
+    if (!fileBuffer || !Buffer.isBuffer(fileBuffer)) {
+      throw new Error('Invalid file data - not a Buffer');
+    }
+    
+    if (fileBuffer.length === 0) {
+      throw new Error('Empty file data');
+    }
+    
+    // Create block blob client
+    const blockBlobClient = containerClient.getBlockBlobClient(blobPath);
+    
+    console.log(`🚀 Starting upload for ${fileName} (${fileBuffer.length} bytes)`);
+    console.log(`📄 MimeType: ${mimetype || 'application/octet-stream'}`);
+    
+    // Upload the file
+    await blockBlobClient.upload(fileBuffer, fileBuffer.length, {
+      blobHTTPHeaders: {
+        blobContentType: mimetype || 'application/octet-stream'
+      }
+    });
+    
+    const blobUrl = blockBlobClient.url;
+    
+    console.log(`✅ Successfully uploaded: ${blobPath}`);
+    console.log(`🔗 Blob URL: ${blobUrl}`);
+    
+    return {
+      success: true,
+      originalName: fileName,
+      blobName: uniqueFileName,
+      blobUrl: blobUrl,
+      size: fileBuffer.length,
+      mimetype: mimetype
+    };
+    
+  } catch (error) {
+    console.error("❌ Azure Blob Storage upload error:", error);
+    return {
+      success: false,
+      error: error.message,
+      originalName: fileName
+    };
+  }
+}
+
+module.exports = { uploadFilesToBlob, createVirtualFolders, uploadSingleFile }; 
