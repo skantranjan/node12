@@ -1,4 +1,4 @@
-const { insertComponentDetail, checkDuplicateComponent } = require('../models/model.addComponent');
+const { insertComponentDetail, checkDuplicateComponent, checkDuplicateComponentCode, checkDuplicateComponentDescription, testTableAccess } = require('../models/model.addComponent');
 const { insertMultipleEvidenceFiles } = require('../models/model.addEvidence');
 const { getPeriodById } = require('../models/model.getPeriods');
 const { uploadFilesToBlob } = require('../utils/azureBlobStorage');
@@ -288,6 +288,25 @@ async function addComponentController(request, reply) {
         field: 'component_code',
         message: 'A value is required for Component Code'
       });
+    } else {
+      // Check for duplicate component_code across both tables
+      try {
+        const duplicateCodeCheck = await checkDuplicateComponentCode(componentData.component_code.trim());
+        
+        if (duplicateCodeCheck.hasDuplicates) {
+          validationErrors.push({
+            field: 'component_code',
+            message: `Component Code "${componentData.component_code}" already exists.`,
+            duplicateDetails: duplicateCodeCheck.duplicates // Keep this for internal reference if needed
+          });
+        }
+      } catch (error) {
+        console.error('❌ Error checking for duplicate component_code:', error);
+        validationErrors.push({
+          field: 'component_code',
+          message: 'Error checking for duplicate Component Code. Please try again.'
+        });
+      }
     }
     
     // 3. Component Description validation
@@ -296,6 +315,50 @@ async function addComponentController(request, reply) {
         field: 'component_description',
         message: 'A value is required for Component Description'
       });
+    } else {
+      // Validate component_description length and format
+      const description = componentData.component_description.trim();
+      
+      if (description.length < 3) {
+        validationErrors.push({
+          field: 'component_description',
+          message: 'Component Description must be at least 3 characters long'
+        });
+      }
+      
+      if (description.length > 500) {
+        validationErrors.push({
+          field: 'component_description',
+          message: 'Component Description must not exceed 500 characters'
+        });
+      }
+      
+      // Check if description contains only whitespace or special characters
+      if (!/^[a-zA-Z0-9\s\-_.,()&]+$/i.test(description)) {
+        validationErrors.push({
+          field: 'component_description',
+          message: 'Component Description contains invalid characters. Only letters, numbers, spaces, hyphens, underscores, commas, periods, parentheses, and ampersands are allowed.'
+        });
+      }
+      
+      // Check for duplicate component_description in sdp_component_details table
+      try {
+        const duplicateDescriptionCheck = await checkDuplicateComponentDescription(description);
+        
+        if (duplicateDescriptionCheck.hasDuplicates) {
+          validationErrors.push({
+            field: 'component_description',
+            message: `Component Description "${description}" already exists.`,
+            duplicateDetails: duplicateDescriptionCheck.duplicates // Keep this for internal reference if needed
+          });
+        }
+      } catch (error) {
+        console.error('❌ Error checking for duplicate component_description:', error);
+        validationErrors.push({
+          field: 'component_description',
+          message: 'Error checking for duplicate Component Description. Please try again.'
+        });
+      }
     }
     
     // 4. Component validity date - From validation
@@ -403,6 +466,11 @@ async function addComponentController(request, reply) {
     // Set default value for is_active if not provided
     if (componentData.is_active === undefined) {
       componentData.is_active = true;
+    }
+
+    // Set default value for is_approved if not provided
+    if (componentData.is_approved === undefined) {
+      componentData.is_approved = false; // Default to false, needs approval
     }
 
     console.log('\n📁 === AZURE FOLDER CREATION ===');
@@ -534,4 +602,35 @@ async function addComponentController(request, reply) {
   }
 }
 
-module.exports = { addComponentController }; 
+/**
+ * Test function to verify table accessibility
+ */
+async function testTableAccessController(request, reply) {
+  try {
+    console.log('🧪 Testing table accessibility from controller...');
+    const result = await testTableAccess();
+    
+    if (result.success) {
+      reply.send({
+        success: true,
+        message: 'Table accessibility test successful',
+        data: result
+      });
+    } else {
+      reply.code(500).send({
+        success: false,
+        message: 'Table accessibility test failed',
+        error: result.error
+      });
+    }
+  } catch (error) {
+    console.error('❌ Error in testTableAccessController:', error);
+    reply.code(500).send({
+      success: false,
+      message: 'Error testing table accessibility',
+      error: error.message
+    });
+  }
+}
+
+module.exports = { addComponentController, testTableAccessController }; 

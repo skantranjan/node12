@@ -152,6 +152,11 @@ async function updateSkuDetailBySkuCode(sku_code, data) {
     values.push(data.bulk_expert);
   }
   
+  if (data.is_approved !== undefined) {
+    updateFields.push(`is_approved = $${paramIndex++}`);
+    values.push(data.is_approved);
+  }
+  
   // Add WHERE condition
   values.push(sku_code);
   
@@ -159,7 +164,7 @@ async function updateSkuDetailBySkuCode(sku_code, data) {
     UPDATE public.sdp_skudetails SET
       ${updateFields.join(', ')}
     WHERE sku_code = $${paramIndex}
-    RETURNING id, sku_code, sku_description, cm_code, cm_description, sku_reference, is_active, created_by, created_date, period, purchased_quantity, sku_reference_check, formulation_reference, dual_source_sku, site, skutype, bulk_expert;
+    RETURNING id, sku_code, sku_description, cm_code, cm_description, sku_reference, is_active, created_by, created_date, period, purchased_quantity, sku_reference_check, formulation_reference, dual_source_sku, site, skutype, bulk_expert, is_approved;
   `;
   
   const result = await pool.query(query, values);
@@ -579,7 +584,7 @@ async function getConsolidatedDashboardData(cmCode, options = {}) {
       const query = `
         SELECT id, sku_code, site, sku_description, cm_code, cm_description, sku_reference, 
                is_active, created_by, created_date, period, purchased_quantity, sku_reference_check, 
-               formulation_reference, dual_source_sku, skutype, bulk_expert
+               formulation_reference, dual_source_sku, skutype, bulk_expert, is_approved
         FROM public.sdp_skudetails
         WHERE cm_code = $1 AND is_active = true
         ORDER BY id DESC;

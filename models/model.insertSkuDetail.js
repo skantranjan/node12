@@ -56,9 +56,9 @@ async function getMappingTableStructure() {
 async function insertSkuDetail(data) {
   const query = `
     INSERT INTO public.sdp_skudetails (
-      sku_code, sku_description, cm_code, cm_description, sku_reference, is_active, created_by, created_date, period, purchased_quantity, sku_reference_check, formulation_reference, dual_source_sku, site, skutype, bulk_expert
-    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
-    RETURNING id, sku_code, sku_description, cm_code, cm_description, sku_reference, is_active, created_by, created_date, period, purchased_quantity, sku_reference_check, formulation_reference, dual_source_sku, site, skutype, bulk_expert;
+      sku_code, sku_description, cm_code, cm_description, sku_reference, is_active, created_by, created_date, period, purchased_quantity, sku_reference_check, formulation_reference, dual_source_sku, site, skutype, bulk_expert, is_approved
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+    RETURNING id, sku_code, sku_description, cm_code, cm_description, sku_reference, is_active, created_by, created_date, period, purchased_quantity, sku_reference_check, formulation_reference, dual_source_sku, site, skutype, bulk_expert, is_approved;
   `;
   const values = [
     data.sku_code,
@@ -76,7 +76,8 @@ async function insertSkuDetail(data) {
     data.dual_source_sku || null,
     data.site || null,
     data.skutype || null,  // Only insert if provided
-    data.bulk_expert || null
+    data.bulk_expert || null,
+    data.is_approved || null
   ];
   
   try {

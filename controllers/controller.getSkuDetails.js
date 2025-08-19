@@ -453,6 +453,7 @@ async function updateSkuDetailBySkuCodeController(request, reply) {
       site, 
       formulation_reference,
       bulk_expert,
+      is_approved,
       components
     } = request.body;
     
@@ -469,13 +470,13 @@ async function updateSkuDetailBySkuCodeController(request, reply) {
     }
     
     // Check if at least one field is provided for update
-    const updateFields = { sku_description, sku_reference, skutype, site, formulation_reference, bulk_expert };
+    const updateFields = { sku_description, sku_reference, skutype, site, formulation_reference, bulk_expert, is_approved };
     const hasUpdateData = Object.values(updateFields).some(value => value !== undefined && value !== null);
     
     if (!hasUpdateData && (!components || components.length === 0)) {
       return reply.code(400).send({ 
         success: false, 
-        message: 'At least one field must be provided for update (sku_description, sku_reference, skutype, site, formulation_reference, bulk_expert) or components array' 
+        message: 'At least one field must be provided for update (sku_description, sku_reference, skutype, site, formulation_reference, bulk_expert, is_approved) or components array' 
       });
     }
     
@@ -496,6 +497,7 @@ async function updateSkuDetailBySkuCodeController(request, reply) {
     if (site !== undefined) data.site = site;
     if (formulation_reference !== undefined) data.formulation_reference = formulation_reference;
     if (bulk_expert !== undefined) data.bulk_expert = bulk_expert;
+    if (is_approved !== undefined) data.is_approved = is_approved;
     
     // Get the updated data to compare with old data for audit logging
     const updated = await updateSkuDetailBySkuCode(sku_code, data);

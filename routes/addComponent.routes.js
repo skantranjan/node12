@@ -1,4 +1,4 @@
-const { addComponentController } = require('../controllers/controller.addComponent');
+const { addComponentController, testTableAccessController } = require('../controllers/controller.addComponent');
 const bearerTokenMiddleware = require('../middleware/middleware.bearer');
 
 async function addComponentRoutes(fastify, options) {
@@ -6,6 +6,9 @@ async function addComponentRoutes(fastify, options) {
   fastify.post('/add-component', {
     preHandler: bearerTokenMiddleware
   }, addComponentController);
+  
+  // Test route for debugging table accessibility
+  fastify.get('/test-table-access', testTableAccessController);
 }
 
 module.exports = addComponentRoutes; 
