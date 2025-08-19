@@ -3,7 +3,7 @@ const { BlobServiceClient } = require("@azure/storage-blob");
 
 // Production configuration
 const accountName = process.env.AZURE_STORAGE_ACCOUNT || "ukssdptldev001";
-const containerName = process.env.AZURE_CONTAINER_NAME || "sdpdevstoragecontainer";
+const containerName = process.env.AZURE_CONTAINER_NAME || "storage";
 const blobUrl = `https://${accountName}.blob.core.windows.net`;
 
 // Choose authentication method based on environment
@@ -285,12 +285,25 @@ async function createVirtualFolders(year, cmCode, skuCode, componentCode) {
  * @param {string} skuCode - SKU Code
  * @param {string} componentCode - Component Code
  * @param {string} year - Year
+ * @param {string} folder - Folder name for organization (optional)
  * @returns {Object} - Upload result with blob URL
  */
-async function uploadSingleFile(fileBuffer, fileName, mimetype, cmCode, skuCode, componentCode, year) {
+async function uploadSingleFile(fileBuffer, fileName, mimetype, cmCode, skuCode, componentCode, year, folder = 'evidence') {
   try {
     console.log('🔧 === AZURE BLOB STORAGE - SINGLE FILE UPLOAD ===');
-    console.log(`📂 Container: ${containerName}`);
+    
+    // Determine container based on file category
+    let targetContainer;
+    if (folder === 'evidence') {
+      // Chemical evidence files go to 'storage' container
+      targetContainer = process.env.AZURE_CONTAINER_NAME || "storage";
+      console.log(`📂 Container: ${targetContainer} (for chemical evidence)`);
+    } else {
+      // All other file categories go to 'sdpdevstoragecontainer'
+      targetContainer = process.env.AZURE_CONTAINER_NAME_OTHER || "sdpdevstoragecontainer";
+      console.log(`📂 Container: ${targetContainer} (for ${folder} files)`);
+    }
+    
     console.log(`📂 Account: ${accountName}`);
     
     // Construct blob URL inside the function
@@ -308,15 +321,15 @@ async function uploadSingleFile(fileBuffer, fileName, mimetype, cmCode, skuCode,
       blobServiceClient = new BlobServiceClient(constructedBlobUrl, credential);
     }
     
-    const containerClient = blobServiceClient.getContainerClient(containerName);
+    const containerClient = blobServiceClient.getContainerClient(targetContainer);
     
     // Create unique filename with timestamp
     const fileExtension = fileName.split('.').pop();
     const timestamp = Date.now();
     const uniqueFileName = `${fileName.split('.')[0]}_${timestamp}.${fileExtension}`;
     
-    // Create folder structure: year/cmCode/skuCode/componentCode/evidence/
-    const folderPath = `${year}/${cmCode}/${skuCode}/${componentCode}/evidence/`;
+    // Create folder structure: year/cmCode/skuCode/componentCode/folder/
+    const folderPath = `${year}/${cmCode}/${skuCode}/${componentCode}/${folder}/`;
     const blobPath = `${folderPath}${uniqueFileName}`;
     
     console.log(`📁 Creating folder structure: ${folderPath}`);
@@ -356,7 +369,8 @@ async function uploadSingleFile(fileBuffer, fileName, mimetype, cmCode, skuCode,
       blobName: uniqueFileName,
       blobUrl: blobUrl,
       size: fileBuffer.length,
-      mimetype: mimetype
+      mimetype: mimetype,
+      container: targetContainer
     };
     
   } catch (error) {

@@ -231,7 +231,12 @@ async function addComponentController(request, reply) {
           }
           
           // Handle different field types
-          if (key === 'evidence_of_recycled_or_bio_source' || key.endsWith('_files')) {
+          if (key === 'evidence_of_recycled_or_bio_source' || 
+              key === 'weight_evidence_files' ||
+              key === 'weight_uom_evidence_files' ||
+              key === 'packaging_type_evidence_files' ||
+              key === 'material_type_evidence_files' ||
+              key.endsWith('_files')) {
             // This is a file field - extract file data
             fileFields.push(key);
             
@@ -421,12 +426,42 @@ async function addComponentController(request, reply) {
 
     // Handle file upload and evidence insertion
     let evidenceFileData = null;
+    let uploadedFiles = {};
+    
     if (Object.keys(fileData).length > 0) {
       console.log('📁 Processing file uploads...');
       
       for (const [fieldName, fileInfo] of Object.entries(fileData)) {
         if (fileInfo.buffer) {
           console.log(`🚀 Uploading file: ${fileInfo.filename}`);
+          
+          // Determine category and folder based on field name
+          let category, folderName;
+          switch (fieldName) {
+            case 'evidence_of_recycled_or_bio_source':
+              category = 'component_evidence';
+              folderName = 'evidence';
+              break;
+            case 'weight_evidence_files':
+              category = 'weight_evidence';
+              folderName = 'weight';
+              break;
+            case 'weight_uom_evidence_files':
+              category = 'weight_uom_evidence';
+              folderName = 'weightUOM';
+              break;
+            case 'packaging_type_evidence_files':
+              category = 'packaging_type_evidence';
+              folderName = 'packagingType';
+              break;
+            case 'material_type_evidence_files':
+              category = 'material_type_evidence';
+              folderName = 'materialType';
+              break;
+            default:
+              category = 'other_evidence';
+              folderName = 'other';
+          }
           
           // Upload file to Azure Blob Storage
           const uploadResult = await uploadSingleFile(
@@ -436,11 +471,23 @@ async function addComponentController(request, reply) {
             componentData.cm_code,
             componentData.sku_code,
             componentData.component_code,
-            componentData.year || componentData.periods
+            componentData.year || componentData.periods,
+            folderName  // Pass folder name for organization
           );
           
           if (uploadResult.success) {
             console.log(`✅ File uploaded successfully: ${uploadResult.blobUrl}`);
+            
+            // Store upload result for this category
+            if (!uploadedFiles[category]) {
+              uploadedFiles[category] = [];
+            }
+            uploadedFiles[category].push({
+              filename: fileInfo.filename,
+              blobUrl: uploadResult.blobUrl,
+              size: fileInfo.size,
+              mimetype: fileInfo.mimetype
+            });
             
             // Insert evidence record into sdp_evidence table
             const evidenceData = {
@@ -449,7 +496,7 @@ async function addComponentController(request, reply) {
               evidence_file_url: uploadResult.blobUrl,
               created_by: componentData.created_by || componentData.user_id || '1',
               created_date: new Date(),
-              category: 'component_evidence'
+              category: category
             };
             
             evidenceFileData = await insertEvidenceFile(evidenceData);
@@ -457,6 +504,80 @@ async function addComponentController(request, reply) {
             
           } else {
             console.error(`❌ File upload failed: ${uploadResult.error}`);
+          }
+        } else if (Array.isArray(fileInfo)) {
+          // Handle multiple files for the same category
+          console.log(`📁 Processing ${fileInfo.length} files for ${fieldName}`);
+          
+          let category, folderName;
+          switch (fieldName) {
+            case 'weight_evidence_files':
+              category = 'weight_evidence';
+              folderName = 'weight';
+              break;
+            case 'weight_uom_evidence_files':
+              category = 'weight_uom_evidence';
+              folderName = 'weightUOM';
+              break;
+            case 'packaging_type_evidence_files':
+              category = 'packaging_type_evidence';
+              folderName = 'packagingType';
+              break;
+            case 'material_type_evidence_files':
+              category = 'material_type_evidence';
+              folderName = 'materialType';
+              break;
+            default:
+              category = 'other_evidence';
+              folderName = 'other';
+          }
+          
+          if (!uploadedFiles[category]) {
+            uploadedFiles[category] = [];
+          }
+          
+          for (const file of fileInfo) {
+            if (file.buffer) {
+              console.log(`🚀 Uploading file: ${file.filename}`);
+              
+              const uploadResult = await uploadSingleFile(
+                file.buffer,
+                file.filename,
+                file.mimetype,
+                componentData.cm_code,
+                componentData.sku_code,
+                componentData.component_code,
+                componentData.year || componentData.periods,
+                folderName
+              );
+              
+              if (uploadResult.success) {
+                console.log(`✅ File uploaded successfully: ${uploadResult.blobUrl}`);
+                
+                uploadedFiles[category].push({
+                  filename: file.filename,
+                  blobUrl: uploadResult.blobUrl,
+                  size: file.size,
+                  mimetype: file.mimetype
+                });
+                
+                // Insert evidence record for each file
+                const evidenceData = {
+                  component_id: componentId,
+                  evidence_file_name: file.filename,
+                  evidence_file_url: uploadResult.blobUrl,
+                  created_by: componentData.created_by || componentData.user_id || '1',
+                  created_date: new Date(),
+                  category: category
+                };
+                
+                await insertEvidenceFile(evidenceData);
+                console.log(`✅ Evidence record created for ${file.filename}`);
+                
+              } else {
+                console.error(`❌ File upload failed for ${file.filename}: ${uploadResult.error}`);
+              }
+            }
           }
         }
       }
@@ -476,6 +597,7 @@ async function addComponentController(request, reply) {
         fileProcessing: {
           totalFileFields: fileFields.length,
           filesWithData: Object.keys(fileData).length,
+          uploadedFiles: uploadedFiles,
           fileDetails: Object.keys(fileData).map(fieldName => {
             const files = fileData[fieldName];
             if (Array.isArray(files)) {
